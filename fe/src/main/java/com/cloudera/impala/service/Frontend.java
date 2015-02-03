@@ -80,6 +80,7 @@ import com.cloudera.impala.catalog.HdfsPartition;
 import com.cloudera.impala.catalog.ImpaladCatalog;
 import com.cloudera.impala.catalog.Table;
 import com.cloudera.impala.catalog.Type;
+import com.cloudera.impala.catalog.View;
 import com.cloudera.impala.common.AnalysisException;
 import com.cloudera.impala.common.FileSystemUtil;
 import com.cloudera.impala.common.ImpalaException;
@@ -122,6 +123,8 @@ import com.cloudera.impala.thrift.TStmtType;
 import com.cloudera.impala.thrift.TTableName;
 import com.cloudera.impala.thrift.TUpdateCatalogCacheRequest;
 import com.cloudera.impala.thrift.TUpdateCatalogCacheResponse;
+import com.cloudera.impala.thrift.TCatalogObjectType;
+import com.cloudera.impala.thrift.TGetTablesResult;
 import com.cloudera.impala.util.EventSequence;
 import com.cloudera.impala.util.PatternMatcher;
 import com.cloudera.impala.util.TResultRowBuilder;
@@ -241,7 +244,8 @@ public class Frontend {
       ddl.op_type = TCatalogOpType.SHOW_TABLES;
       ddl.setShow_tables_params(analysis.getShowTablesStmt().toThrift());
       metadata.setColumns(Arrays.asList(
-          new TColumn("name", Type.STRING.toThrift())));
+          new TColumn("name", Type.STRING.toThrift()),
+          new TColumn("type", Type.STRING.toThrift())));
     } else if (analysis.isShowDbsStmt()) {
       ddl.op_type = TCatalogOpType.SHOW_DBS;
       ddl.setShow_dbs_params(analysis.getShowDbsStmt().toThrift());
@@ -542,11 +546,11 @@ public class Frontend {
   }
 
   /**
-   * Returns all tables that match the specified database and pattern that are accessible
-   * to the given user. If pattern is null, matches all tables. If db is null, all
-   * databases are searched for matches.
+   * Returns all tables and their table types that match the specified database and
+   * pattern that are accessible to the given user. If pattern is null, matches
+   * all tables. If db is null, all databases are searched for matches.
    */
-  public List<String> getTableNames(String dbName, String tablePattern, User user)
+  public TGetTablesResult getTableNames(String dbName, String tablePattern, User user)
       throws ImpalaException {
     List<String> tblNames = impaladCatalog_.getTableNames(dbName, tablePattern);
     if (authzConfig_.isEnabled()) {
@@ -559,7 +563,29 @@ public class Frontend {
         }
       }
     }
-    return tblNames;
+
+    List<String> tblTypes = Lists.newArrayList();
+    for (String tbl: tblNames) {
+      Table table = impaladCatalog_.getTable(dbName, tbl);
+      if (table == null) {
+        tblTypes.add("UNKNOWN");
+      } else if (table instanceof HdfsTable) {
+        tblTypes.add("HDFS_TABLE");
+      } else if (table instanceof HBaseTable) {
+        tblTypes.add("HBASE_TABLE");
+      } else if (table instanceof View) {
+        tblTypes.add("HBASE_TABLE");
+      } else if (table instanceof DataSourceTable) {
+        tblTypes.add("DATA_SOURCE_TABLE");
+      } else {
+        tblTypes.add(table.toString());
+      }
+    }
+
+    TGetTablesResult result = new TGetTablesResult();
+    result.setNames(tblNames);
+    result.setTypes(tblTypes);
+    return result;
   }
 
   /**

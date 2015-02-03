@@ -7,39 +7,39 @@ use functional
 # Simple pattern literal
 show tables "alltypes"
 ---- RESULTS
-'alltypes'
+'alltypes','TABLE'
 ---- TYPES
-STRING
+STRING,STRING
 ====
 ---- QUERY
 # Pattern with wildcard
 show tables "all*ypes"
 ---- RESULTS
-'alltypes'
-'allcomplextypes'
+'alltypes','TABLE'
+'allcomplextypes','TABLE'
 ---- TYPES
-STRING
+STRING,STRING
 ====
 ---- QUERY
 # Empty string matches nothing
 show tables ""
 ---- RESULTS
 ---- TYPES
-STRING
+STRING,STRING
 ====
 ---- QUERY
 # Check that regex metacharacters are being escaped
 show tables '+alltypes'
 ---- RESULTS
 ---- TYPES
-STRING
+STRING,STRING
 ====
 ---- QUERY
 # Fully qualified names will not match
 show tables "functional.alltypes"
 ---- RESULTS
 ---- TYPES
-STRING
+STRING,STRING
 ====
 ---- QUERY
 # Database names are case insensitive.
@@ -53,137 +53,137 @@ USE FUNCTIONAL
 # loaded, for example.
 show tables '*'
 ---- RESULTS: VERIFY_IS_SUBSET
-'alltypes'
-'alltypesagg'
-'alltypesaggmultifiles'
-'alltypesaggmultifilesnopart'
-'alltypesaggnonulls'
-'alltypeserror'
-'alltypeserrornonulls'
-'alltypesinsert'
-'alltypesmixedformat'
-'alltypesnopart'
-'alltypesnopart_insert'
-'alltypessmall'
-'alltypestiny'
-'dimtbl'
-'emptytable'
-'escapechartesttable'
-'greptiny'
-'insert_overwrite_nopart'
-'insert_overwrite_partitioned'
-'jointbl'
-'liketbl'
-'nullescapedtable'
-'nullinsert'
-'nullinsert_alt'
-'nulltable'
-'overflow'
-'rankingssmall'
-'stringpartitionkey'
-'tblwithraggedcolumns'
-'testtbl'
-'text_comma_backslash_newline'
-'text_dollar_hash_pipe'
-'tinyinttable'
-'tinytable'
-'uservisitssmall'
-'zipcode_incomes'
+'alltypes','TABLE'
+'alltypesagg','TABLE'
+'alltypesaggmultifiles','TABLE'
+'alltypesaggmultifilesnopart','TABLE'
+'alltypesaggnonulls','TABLE'
+'alltypeserror','TABLE'
+'alltypeserrornonulls','TABLE'
+'alltypesinsert','TABLE'
+'alltypesmixedformat','TABLE'
+'alltypesnopart','TABLE'
+'alltypesnopart_insert','TABLE'
+'alltypessmall','TABLE'
+'alltypestiny','TABLE'
+'dimtbl','TABLE'
+'emptytable','TABLE'
+'escapechartesttable','TABLE'
+'greptiny','TABLE'
+'insert_overwrite_nopart','TABLE'
+'insert_overwrite_partitioned','TABLE'
+'jointbl','TABLE'
+'liketbl','TABLE'
+'nullescapedtable','TABLE'
+'nullinsert','TABLE'
+'nullinsert_alt','TABLE'
+'nulltable','TABLE'
+'overflow','TABLE'
+'rankingssmall','TABLE'
+'stringpartitionkey','TABLE'
+'tblwithraggedcolumns','TABLE'
+'testtbl','TABLE'
+'text_comma_backslash_newline','TABLE'
+'text_dollar_hash_pipe','TABLE'
+'tinyinttable','TABLE'
+'tinytable','TABLE'
+'uservisitssmall','TABLE'
+'zipcode_incomes','TABLE'
 ---- TYPES
-STRING
+STRING,STRING
 ====
 ---- QUERY
 # Choice amongst patterns
 show tables "alltypes|stringpartitionkey|testtbl"
 ---- RESULTS
-'alltypes'
-'stringpartitionkey'
-'testtbl'
+'alltypes','TABLE'
+'stringpartitionkey','TABLE'
+'testtbl','TABLE'
 ---- TYPES
-STRING
+STRING,STRING
 ====
 ---- QUERY
 # Show tables in
 show tables in functional
 ---- RESULTS: VERIFY_IS_SUBSET
-'alltypes'
-'alltypesagg'
-'alltypesaggmultifiles'
-'alltypesaggmultifilesnopart'
-'alltypesaggnonulls'
-'alltypeserror'
-'alltypeserrornonulls'
-'alltypesinsert'
-'alltypesmixedformat'
-'alltypesnopart'
-'alltypesnopart_insert'
-'alltypessmall'
-'alltypestiny'
-'dimtbl'
-'emptytable'
-'escapechartesttable'
-'greptiny'
-'insert_overwrite_nopart'
-'insert_overwrite_partitioned'
-'jointbl'
-'liketbl'
-'nullescapedtable'
-'nullinsert'
-'nullinsert_alt'
-'nulltable'
-'overflow'
-'rankingssmall'
-'stringpartitionkey'
-'tblwithraggedcolumns'
-'testtbl'
-'text_comma_backslash_newline'
-'text_dollar_hash_pipe'
-'tinyinttable'
-'tinytable'
-'uservisitssmall'
-'zipcode_incomes'
+'alltypes','TABLE'
+'alltypesagg','TABLE'
+'alltypesaggmultifiles','TABLE'
+'alltypesaggmultifilesnopart','TABLE'
+'alltypesaggnonulls','TABLE'
+'alltypeserror','TABLE'
+'alltypeserrornonulls','TABLE'
+'alltypesinsert','TABLE'
+'alltypesmixedformat','TABLE'
+'alltypesnopart','TABLE'
+'alltypesnopart_insert','TABLE'
+'alltypessmall','TABLE'
+'alltypestiny','TABLE'
+'dimtbl','TABLE'
+'emptytable','TABLE'
+'escapechartesttable','TABLE'
+'greptiny','TABLE'
+'insert_overwrite_nopart','TABLE'
+'insert_overwrite_partitioned','TABLE'
+'jointbl','TABLE'
+'liketbl','TABLE'
+'nullescapedtable','TABLE'
+'nullinsert','TABLE'
+'nullinsert_alt','TABLE'
+'nulltable','TABLE'
+'overflow','TABLE'
+'rankingssmall','TABLE'
+'stringpartitionkey','TABLE'
+'tblwithraggedcolumns','TABLE'
+'testtbl','TABLE'
+'text_comma_backslash_newline','TABLE'
+'text_dollar_hash_pipe','TABLE'
+'tinyinttable','TABLE'
+'tinytable','TABLE'
+'uservisitssmall','TABLE'
+'zipcode_incomes','TABLE'
 ---- TYPES
-STRING
+STRING,STRING
 ====
 ---- QUERY
 # Show tables in with a pattern
 show tables in functional like 'alltypesagg*'
 ---- RESULTS
-'alltypesagg'
-'alltypesaggmultifiles'
-'alltypesaggmultifilesnopart'
-'alltypesaggnonulls'
+'alltypesagg','TABLE'
+'alltypesaggmultifiles','TABLE'
+'alltypesaggmultifilesnopart','TABLE'
+'alltypesaggnonulls','TABLE'
 ---- TYPES
-STRING
+STRING,STRING
 ====
 ---- QUERY
 # Coverage of syntax variations.
 show tables in functional 'alltypesagg'
 ---- RESULTS
-'alltypesagg'
+'alltypesagg','TABLE'
 ---- TYPES
-STRING
+STRING,STRING
 ====
 ---- QUERY
 show tables in functional like 'alltypesagg'
 ---- RESULTS
-'alltypesagg'
+'alltypesagg','TABLE'
 ---- TYPES
-STRING
+STRING,STRING
 ====
 ---- QUERY
 show tables 'alltypesagg'
 ---- RESULTS
-'alltypesagg'
+'alltypesagg','TABLE'
 ---- TYPES
-STRING
+STRING,STRING
 ====
 ---- QUERY
 show tables like 'alltypesagg'
 ---- RESULTS
-'alltypesagg'
+'alltypesagg','TABLE'
 ---- TYPES
-STRING
+STRING,STRING
 ====
 ---- QUERY
 # Show databases

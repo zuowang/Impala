@@ -29,6 +29,11 @@ import com.cloudera.impala.authorization.User;
 import com.cloudera.impala.catalog.CatalogException;
 import com.cloudera.impala.catalog.CatalogServiceCatalog;
 import com.cloudera.impala.catalog.Function;
+import com.cloudera.impala.catalog.Table;
+import com.cloudera.impala.catalog.HdfsTable;
+import com.cloudera.impala.catalog.HBaseTable;
+import com.cloudera.impala.catalog.View;
+import com.cloudera.impala.catalog.DataSourceTable;
 import com.cloudera.impala.common.ImpalaException;
 import com.cloudera.impala.common.InternalException;
 import com.cloudera.impala.common.JniUtil;
@@ -48,9 +53,12 @@ import com.cloudera.impala.thrift.TResetMetadataRequest;
 import com.cloudera.impala.thrift.TSentryAdminCheckRequest;
 import com.cloudera.impala.thrift.TUniqueId;
 import com.cloudera.impala.thrift.TUpdateCatalogRequest;
+import com.cloudera.impala.thrift.TGetTablesResult;
+import com.cloudera.impala.thrift.TCatalogObjectType;
 import com.cloudera.impala.util.GlogAppender;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+import com.google.common.collect.Lists;
 
 /**
  * JNI-callable interface for the CatalogService. The main point is to serialize
@@ -166,9 +174,28 @@ public class JniCatalog {
       TException {
     TGetTablesParams params = new TGetTablesParams();
     JniUtil.deserializeThrift(protocolFactory_, params, thriftGetTablesParams);
-    List<String> tables = catalog_.getTableNames(params.db, params.pattern);
+    List<String> tblNames = catalog_.getTableNames(params.db, params.pattern);
+    List<String> tblTypes = Lists.newArrayList();
+    for (String tbl: tblNames) {
+      Table table = catalog_.getTable(params.db, tbl);
+      if (table==null) {
+        tblTypes.add("UNKNOWN");
+      } else if (table instanceof HdfsTable) {
+        tblTypes.add("HDFS_TABLE");
+      } else if (table instanceof HBaseTable) {
+        tblTypes.add("HBASE_TABLE");
+      } else if (table instanceof View) {
+        tblTypes.add("HBASE_TABLE");
+      } else if (table instanceof DataSourceTable) {
+        tblTypes.add("DATA_SOURCE_TABLE");
+      } else {
+        tblTypes.add(table.toString());
+      }
+    }
+
     TGetTablesResult result = new TGetTablesResult();
-    result.setTables(tables);
+    result.setNames(tblNames);
+    result.setTypes(tblTypes);
     TSerializer serializer = new TSerializer(protocolFactory_);
     return serializer.serialize(result);
   }

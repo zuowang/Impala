@@ -359,7 +359,7 @@ void CatalogServer::CatalogUrlCallback(const Webserver::ArgumentMap& args,
     }
 
     Value table_array(kArrayType);
-    BOOST_FOREACH(const string& table, get_table_results.tables) {
+    BOOST_FOREACH(const string& table, get_table_results.names) {
       Value table_obj(kObjectType);
       Value fq_name(Substitute("$0.$1", db, table).c_str(), document->GetAllocator());
       table_obj.AddMember("fqtn", fq_name, document->GetAllocator());

@@ -80,7 +80,10 @@ struct TGetTablesParams {
 
 // getTableNames returns a list of unqualified table names
 struct TGetTablesResult {
-  1: list<string> tables
+  1: required list<string> names
+
+  // table type: TABLE or VIEW
+  2: required list<string> types
 }
 
 // Arguments to getDbNames, which returns a list of dbs that match an optional

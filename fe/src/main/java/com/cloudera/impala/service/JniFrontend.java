@@ -198,7 +198,7 @@ public class JniFrontend {
 
 
   /**
-   * Returns a list of table names matching an optional pattern.
+   * Returns a list of table names and their types matching an optional pattern.
    * The argument is a serialized TGetTablesParams object.
    * The return type is a serialised TGetTablesResult object.
    * @see Frontend#getTableNames
@@ -212,10 +212,7 @@ public class JniFrontend {
         ImpalaInternalAdminUser.getInstance();
 
     Preconditions.checkState(!params.isSetSession() || user != null );
-    List<String> tables = frontend_.getTableNames(params.db, params.pattern, user);
-
-    TGetTablesResult result = new TGetTablesResult();
-    result.setTables(tables);
+    TGetTablesResult result = frontend_.getTableNames(params.db, params.pattern, user);
 
     TSerializer serializer = new TSerializer(protocolFactory_);
     try {

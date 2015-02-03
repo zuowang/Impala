@@ -62,6 +62,7 @@ import com.cloudera.impala.thrift.TPrivilegeScope;
 import com.cloudera.impala.thrift.TQueryCtx;
 import com.cloudera.impala.thrift.TResultSet;
 import com.cloudera.impala.thrift.TSessionState;
+import com.cloudera.impala.thrift.TGetTablesResult;
 import com.cloudera.impala.util.SentryPolicyService;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
@@ -1138,14 +1139,18 @@ public class AuthorizationTest {
   @Test
   public void TestShowTableResultsFiltered() throws ImpalaException {
     // The user only has permission on these tables/views in the functional databases.
-    List<String> expectedTbls =
+    List<String> expectedTblNames =
         Lists.newArrayList("alltypes", "alltypesagg", "complex_view", "view_view");
+    List<String> expectedTypes =
+        Lists.newArrayList("HDFS_TABLE", "HDFS_TABLE", "HBASE_TABLE", "HBASE_TABLE");
 
-    List<String> tables = fe_.getTableNames("functional", "*", USER);
-    Assert.assertEquals(expectedTbls, tables);
+    TGetTablesResult result = fe_.getTableNames("functional", "*", USER);
+    Assert.assertEquals(expectedTblNames, result.names);
+    Assert.assertEquals(expectedTypes, result.types);
 
-    tables = fe_.getTableNames("functional", null, USER);
-    Assert.assertEquals(expectedTbls, tables);
+    result = fe_.getTableNames("functional", null, USER);
+    Assert.assertEquals(expectedTblNames, result.names);
+    Assert.assertEquals(expectedTypes, result.types);
   }
 
   @Test

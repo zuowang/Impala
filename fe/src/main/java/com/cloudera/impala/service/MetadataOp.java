@@ -273,7 +273,7 @@ public class MetadataOp {
         // Get table metadata
         List<String> tableList = Lists.newArrayList();
         List<List<Column>> tablesColumnsList = Lists.newArrayList();
-        for (String tabName: fe.getTableNames(db.getName(), "*", user)) {
+        for (String tabName: fe.getTableNames(db.getName(), "*", user).names) {
           if (!tablePattern.matches(tabName)) continue;
           tableList.add(tabName);
           List<Column> columns = Lists.newArrayList();

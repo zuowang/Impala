@@ -763,7 +763,7 @@ Status ImpalaServer::UpdateCatalogMetrics() {
   BOOST_FOREACH(const string& db, db_names.dbs) {
     TGetTablesResult table_names;
     RETURN_IF_ERROR(exec_env_->frontend()->GetTableNames(db, NULL, NULL, &table_names));
-    ImpaladMetrics::CATALOG_NUM_TABLES->Increment(table_names.tables.size());
+    ImpaladMetrics::CATALOG_NUM_TABLES->Increment(table_names.names.size());
   }
 
   return Status::OK;

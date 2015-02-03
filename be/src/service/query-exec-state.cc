@@ -220,7 +220,7 @@ Status ImpalaServer::QueryExecState::ExecLocalCatalogOp(
       TGetTablesResult table_names;
       RETURN_IF_ERROR(frontend_->GetTableNames(params->db, table_name,
           &query_ctx_.session, &table_names));
-      SetResultSet(table_names.tables);
+      SetResultSet(table_names.names, table_names.types);
       return Status::OK;
     }
     case TCatalogOpType::SHOW_DBS: {
