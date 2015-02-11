@@ -221,7 +221,8 @@ class ImpalaServer : public ImpalaServiceIf, public ImpalaHiveServer2ServiceIf,
   virtual void ConnectionStart(const ThriftServer::ConnectionContext& session_context);
 
   // Called when a Beeswax or HS2 connection terminates. Unregisters all sessions
-  // associated with the closed connection.
+  // associated with the closed Beeswax connection. HS2 protocol allows for sessions
+  // to be independent from the connection, so let sessions expire by themselves.
   virtual void ConnectionEnd(const ThriftServer::ConnectionContext& session_context);
 
   // Called when a membership update is received from the statestore. Looks for
@@ -373,9 +374,7 @@ class ImpalaServer : public ImpalaServiceIf, public ImpalaHiveServer2ServiceIf,
 
   // Close the session and release all resource used by this session.
   // Caller should not hold any locks when calling this function.
-  // If ignore_if_absent is true, returns OK even if a session with the supplied ID does
-  // not exist.
-  Status CloseSessionInternal(const TUniqueId& session_id, bool ignore_if_absent);
+  Status CloseSessionInternal(const TUniqueId& session_id);
 
   // Gets the runtime profile string for a given query_id and writes it to the output
   // stream. First searches for the query id in the map of in-flight queries. If no
@@ -469,7 +468,6 @@ class ImpalaServer : public ImpalaServiceIf, public ImpalaHiveServer2ServiceIf,
   //     "default_database": "default",
   //     "start_time": "2014-08-07 22:50:49",
   //     "last_accessed": "2014-08-07 22:50:49",
-  //     "expired": false,
   //     "closed": false,
   //     "ref_count": 0
   //     }
@@ -772,7 +770,7 @@ class ImpalaServer : public ImpalaServiceIf, public ImpalaHiveServer2ServiceIf,
     // run as children of Beeswax sessions) get results back in the expected format -
     // child queries inherit the HS2 version from their parents, and a Beeswax session
     // will never update the HS2 version from the default.
-    SessionState() : closed(false), expired(false), hs2_version(
+    SessionState() : closed(false), hs2_version(
         apache::hive::service::cli::thrift::
         TProtocolVersion::HIVE_CLI_SERVICE_PROTOCOL_V1), ref_count(0) { }
 
@@ -796,12 +794,6 @@ class ImpalaServer : public ImpalaServiceIf, public ImpalaHiveServer2ServiceIf,
 
     // If true, the session has been closed.
     bool closed;
-
-    // If true, the session was idle for too long and has been expired. Only set when
-    // ref_count == 0, after which point ref_count should never become non-zero (since
-    // clients will use ScopedSessionState to access the session, which will prevent use
-    // after expiration).
-    bool expired;
 
     // The default database (changed as a result of 'use' query execution)
     std::string database;
@@ -876,21 +868,19 @@ class ImpalaServer : public ImpalaServiceIf, public ImpalaHiveServer2ServiceIf,
     SessionStateMap;
   SessionStateMap session_state_map_;
 
-  // Protects connection_to_sessions_map_. May be taken before session_state_map_lock_.
-  boost::mutex connection_to_sessions_map_lock_;
+  // Protects beeswax_cnxn_sessions_map_. May be taken before session_state_map_lock_.
+  boost::mutex beeswax_cnxn_sessions_map_lock_;
 
-  // Map from a connection ID to the associated list of sessions so that all can be closed
-  // when the connection ends. HS2 allows for multiplexing several sessions across a
-  // single connection. If a session has already been closed (only possible via HS2) it is
-  // not removed from this map to avoid the cost of looking it up.
-  typedef boost::unordered_map<TUniqueId, std::vector<TUniqueId> >
+  // Map from a connection ID to the associated session so that session can be closed
+  // when the connection ends. Only used for Beeswax client.
+  typedef boost::unordered_map<TUniqueId, TUniqueId>
     ConnectionToSessionMap;
-  ConnectionToSessionMap connection_to_sessions_map_;
+  ConnectionToSessionMap beeswax_cnxn_sessions_map_;
 
   // Returns session state for given session_id.
   // If not found, session_state will be NULL and an error status will be returned.
-  // If mark_active is true, also checks if the session is expired or closed and
-  // increments the session's reference counter if it is still alive.
+  // If mark_active is true, also checks if the session is closed and increments
+  // the session's reference counter if it is still alive.
   Status GetSessionState(const TUniqueId& session_id,
       boost::shared_ptr<SessionState>* session_state, bool mark_active = false);
 

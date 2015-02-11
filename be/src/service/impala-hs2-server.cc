@@ -624,12 +624,6 @@ void ImpalaServer::OpenSession(TOpenSessionResp& return_val,
     session_state_map_.insert(make_pair(session_id, state));
   }
 
-  {
-    lock_guard<mutex> l(connection_to_sessions_map_lock_);
-    const TUniqueId& connection_id = ThriftServer::GetThreadConnectionId();
-    connection_to_sessions_map_[connection_id].push_back(session_id);
-  }
-
   ImpaladMetrics::IMPALA_SERVER_NUM_OPEN_HS2_SESSIONS->Increment(1L);
 
   return_val.__isset.configuration = true;
@@ -646,7 +640,7 @@ void ImpalaServer::CloseSession(TCloseSessionResp& return_val,
   HS2_RETURN_IF_ERROR(return_val, THandleIdentifierToTUniqueId(
       request.sessionHandle.sessionId, &session_id, &secret), SQLSTATE_GENERAL_ERROR);
   HS2_RETURN_IF_ERROR(return_val,
-      CloseSessionInternal(session_id, false), SQLSTATE_GENERAL_ERROR);
+      CloseSessionInternal(session_id), SQLSTATE_GENERAL_ERROR);
   return_val.status.__set_statusCode(thrift::TStatusCode::SUCCESS_STATUS);
 }
 

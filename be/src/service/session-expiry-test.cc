@@ -81,10 +81,10 @@ TEST(SessionTest, TestExpiry) {
   }
 
   ASSERT_EQ(expired_metric->value(), 10L) << "Sessions did not expire within 5s";
-  ASSERT_EQ(beeswax_session_metric->value(), 5L)
-      << "Beeswax sessions unexpectedly closed after expiration";
-  ASSERT_EQ(hs2_session_metric->value(), 5L)
-      << "HiveServer2 sessions unexpectedly closed after expiration";
+  ASSERT_EQ(beeswax_session_metric->value(), 0L)
+      << "Beeswax sessions live after expiration";
+  ASSERT_EQ(hs2_session_metric->value(), 0L)
+      << "HiveServer2 sessions live after expiration";
 
   TPingImpalaServiceResp resp;
   ASSERT_THROW({beeswax_clients[0]->iface()->PingImpalaService(resp);}, TException)

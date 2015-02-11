@@ -110,9 +110,31 @@ class TestHS2(HS2TestSuite):
     assert err_msg in get_operation_status_resp.status.errorMessage
 
   @pytest.mark.execute_serially
+  @needs_session()
+  def test_reuse_last_session_when_reconnect(self):
+    """session not closed when disconnect and can be reused when reconnect.
+    See IMPALA-1653"""
+    execute_statement_req = TCLIService.TExecuteStatementReq()
+    execute_statement_req.sessionHandle = self.session_handle
+    execute_statement_req.statement = "SELECT COUNT(*) FROM functional.alltypes"
+    execute_statement_resp = self.hs2_client.ExecuteStatement(execute_statement_req)
+    TestHS2.check_response(execute_statement_resp)
+
+    super(TestHS2, self).teardown()
+    super(TestHS2, self).setup()
+
+    execute_statement_req = TCLIService.TExecuteStatementReq()
+    execute_statement_req.sessionHandle = self.session_handle
+    execute_statement_req.statement = "SELECT COUNT(*) FROM functional.alltypes"
+    execute_statement_resp = self.hs2_client.ExecuteStatement(execute_statement_req)
+    TestHS2.check_response(execute_statement_resp)
+
+  @pytest.mark.execute_serially
   def test_socket_close_forces_session_close(self):
     """Test that closing the underlying socket forces the associated session to close.
-    See IMPALA-564"""
+    See IMPALA-564
+    closing the underlying socket won't forces the associated session to close
+    See IMPALA-1653"""
     open_session_req = TCLIService.TOpenSessionReq()
     resp = self.hs2_client.OpenSession(open_session_req)
     TestHS2.check_response(resp)
@@ -124,7 +146,7 @@ class TestHS2(HS2TestSuite):
     self.socket.close()
     self.socket = None
     self.impalad_test_service.wait_for_metric_value(
-      "impala-server.num-open-hiveserver2-sessions", num_sessions - 1)
+      "impala-server.num-open-hiveserver2-sessions", num_sessions)
 
   @pytest.mark.execute_serially
   def test_multiple_sessions(self):
