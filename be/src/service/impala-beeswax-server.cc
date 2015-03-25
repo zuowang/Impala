@@ -118,6 +118,28 @@ class ImpalaServer::AsciiQueryResultSet : public ImpalaServer::QueryResultSet {
     return Status::OK;
   }
 
+  virtual Status AddOneRow(float val,
+      const std::vector<int>& scales) {
+    stringstream out_stream;
+    out_stream.precision(ASCII_PRECISION);
+    if (scales[0] > -1) out_stream.precision(scales[0]);
+    // ODBC-187 - ODBC can only take "\t" as the delimiter
+    out_stream << "";
+    if (LIKELY(std::isfinite(val))) {
+      out_stream << val;
+    } else if (std::isinf(val)) {
+      // 'Infinity' is Java's text representation of inf. By staying close to Java, we
+      // allow Hive to read text tables containing non-finite values produced by
+      // Impala. (The same logic applies to 'NaN', below).
+      out_stream << (val < 0 ? "-Infinity" : "Infinity");
+    } else if (std::isnan(val)) {
+      out_stream << "NaN";
+    }
+
+    result_set_->push_back(out_stream.str());
+    return Status::OK;
+  }
+
   // Convert TResultRow to ASCII using "\t" as column delimiter and store it in this
   // result set.
   virtual Status AddOneRow(const TResultRow& row) {

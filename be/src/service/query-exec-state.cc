@@ -15,6 +15,7 @@
 #include "service/query-exec-state.h"
 
 #include <limits>
+#include <immintrin.h>
 #include <gutil/strings/substitute.h>
 
 #include "exprs/expr.h"
@@ -719,26 +720,31 @@ Status ImpalaServer::QueryExecState::FetchRowsInternal(const int32_t max_rows,
     scoped_ptr<vector<vector<float> > > vec_row_batch(
         new vector<vector<float> >(2, vector<float>(fetched_count)));
     current_batch_->getVectorizedRowBatch(current_batch_row_, &vec_row_batch, fetched_count);
-    float* col0 = (float*)&(vec_row_batch[0]);
-    float* col1 = (float*)&(vec_row_batch[1]);
+    float* col0 = (float*)&((*vec_row_batch)[0][0]);
+    float* col1 = (float*)&((*vec_row_batch)[1][0]);
     vector<float> result(fetched_count);
     float* ret = (float*)&result[0];
     {
       int i;
       __m256 v1, v2, v3;
-      for (i = 0; i < fetched_count; i += 8) {
-        v1 = _mm256_loadu_ps((const float*)(col0 + i));
-        v2 = _mm256_loadu_ps((const float*)(col1 + i));
-        v3 = _mm256_div_ps(v1, v2);
-        _mm256_storeu_ps((float*)(ret + i), v3);
-      }
-      for (i = i - 8 + 1; i < fetched_count; ++i) {
-        ret[i] = col0[i] / col1[i];
+      if (fetched_count >= 8) {
+        for (i = 0; i < fetched_count; i += 8) {
+          v1 = _mm256_loadu_ps((const float*)(col0 + i));
+          v2 = _mm256_loadu_ps((const float*)(col1 + i));
+          v3 = _mm256_div_ps(v1, v2);
+          _mm256_storeu_ps((float*)(ret + i), v3);
+        }
+        for (i = i - 8; i < fetched_count; ++i) {
+          ret[i] = col0[i] / col1[i];
+        }
+      } else {
+        for (i = 0; i < fetched_count; ++i) {
+          ret[i] = col0[i] / col1[i];
+        }
       }
     }
     for (int i = 0; i < fetched_count; ++i) {
-      result_row[0] = FloatVal(ret[i]);
-      RETURN_IF_ERROR(fetched_rows->AddOneRow(result_row, scales));
+      RETURN_IF_ERROR(fetched_rows->AddOneRow(ret[i], scales));
       ++num_rows_fetched_;
       ++current_batch_row_;
     }

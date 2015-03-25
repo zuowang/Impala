@@ -262,6 +262,9 @@ class ImpalaServer : public ImpalaServiceIf, public ImpalaHiveServer2ServiceIf,
     virtual Status AddOneRow(
         const std::vector<void*>& row, const std::vector<int>& scales) = 0;
 
+    virtual Status AddOneRow(float val,
+        const std::vector<int>& scales){return Status::OK;}
+
     // Add the TResultRow to this result set. When a row comes from a DDL/metadata
     // operation, the row in the form of TResultRow.
     virtual Status AddOneRow(const TResultRow& row) = 0;

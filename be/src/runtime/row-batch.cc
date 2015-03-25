@@ -336,7 +336,7 @@ int RowBatch::MaxTupleBufferSize() {
 }
 
 void RowBatch::getVectorizedRowBatch(int current_batch_row,
-      scoped_ptr<vector<vector<float> > >* vec_row_batch, int fetch_count) {
+      boost::scoped_ptr<vector<vector<float> > >* vec_row_batch, int fetch_count) {
   DCHECK_LE(current_batch_row + fetch_count, num_rows_);
   for (int i = current_batch_row; i < current_batch_row + fetch_count; ++i) {
     TupleRow* row = GetRow(i);
@@ -348,7 +348,7 @@ void RowBatch::getVectorizedRowBatch(int current_batch_row,
       vector<SlotDescriptor*>::const_iterator slot = (*desc)->slots().begin();
       for (int k = 0; slot != (*desc)->slots().end(); ++slot, ++k) {
         if (tuple->IsNull((*slot)->null_indicator_offset())) continue;
-        (*vec_row_batch)[k][i] = ((FloatVal*)tuple->GetSlot((*slot)->tuple_offset()))->val;
+        (**vec_row_batch)[k][i] = *reinterpret_cast<float*>(tuple->GetSlot((*slot)->tuple_offset()));
       }
     }
   }

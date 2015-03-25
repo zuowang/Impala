@@ -493,7 +493,7 @@ void SaslAuthProvider::RunKinit(Promise<Status>* first_kinit) {
     // Sleep for the renewal interval, minus a random time between 0-5 minutes to help
     // avoid a storm at the KDC. Additionally, never sleep less than a minute to
     // reduce KDC stress due to frequent renewals.
-    mt19937 generator;
+    boost::mt19937 generator;
     uniform_int<> dist(0, 300);
     SleepForMs(1000 * max((60 * FLAGS_kerberos_reinit_interval) - dist(generator), 60));
   }
