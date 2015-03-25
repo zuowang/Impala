@@ -334,4 +334,23 @@ int RowBatch::MaxTupleBufferSize() {
   DCHECK_LE(tuple_buffer_size, AT_CAPACITY_MEM_USAGE);
   return tuple_buffer_size;
 }
+
+void RowBatch::getVectorizedRowBatch(int current_batch_row,
+      scoped_ptr<vector<vector<float> > >* vec_row_batch, int fetch_count) {
+  DCHECK_LE(current_batch_row + fetch_count, num_rows_);
+  for (int i = current_batch_row; i < current_batch_row + fetch_count; ++i) {
+    TupleRow* row = GetRow(i);
+    const vector<TupleDescriptor*>& tuple_descs = row_desc_.tuple_descriptors();
+    vector<TupleDescriptor*>::const_iterator desc = tuple_descs.begin();
+    for (int j = 0; desc != tuple_descs.end(); ++desc, ++j) {
+      Tuple* tuple = row->GetTuple(j);
+      if (tuple == NULL) continue;
+      vector<SlotDescriptor*>::const_iterator slot = (*desc)->slots().begin();
+      for (int k = 0; slot != (*desc)->slots().end(); ++slot, ++k) {
+        if (tuple->IsNull((*slot)->null_indicator_offset())) continue;
+        (*vec_row_batch)[k][i] = ((FloatVal*)tuple->GetSlot((*slot)->tuple_offset()))->val;
+      }
+    }
+  }
+}
 }

@@ -224,6 +224,9 @@ class RowBatch {
   // Computes the maximum size needed to store tuple data for this row batch.
   int MaxTupleBufferSize();
 
+  void getVectorizedRowBatch(int current_batch_row,
+      scoped_ptr<vector<vector<float> > >* vec_row_batch, int num_rows);
+
  private:
   MemTracker* mem_tracker_;  // not owned
 

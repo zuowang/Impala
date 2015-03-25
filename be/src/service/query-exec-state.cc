@@ -692,6 +692,7 @@ Status ImpalaServer::QueryExecState::FetchRowsInternal(const int32_t max_rows,
     DCHECK_LE(num_rows_fetched_from_cache, max_rows);
     max_coord_rows = max_rows - num_rows_fetched_from_cache;
   }
+/*
   {
     SCOPED_TIMER(row_materialization_timer_);
     // Convert the available rows, limited by max_coord_rows
@@ -707,6 +708,42 @@ Status ImpalaServer::QueryExecState::FetchRowsInternal(const int32_t max_rows,
       ++current_batch_row_;
     }
   }
+*/
+  {
+    SCOPED_TIMER(row_materialization_timer_);
+    // Convert the available rows, limited by max_coord_rows
+    int available = current_batch_->num_rows() - current_batch_row_;
+    int fetched_count = available;
+    // max_coord_rows <= 0 means no limit
+    if (max_coord_rows > 0 && max_coord_rows < available) fetched_count = max_coord_rows;
+    scoped_ptr<vector<vector<float> > > vec_row_batch(
+        new vector<vector<float> >(2, vector<float>(fetched_count)));
+    current_batch_->getVectorizedRowBatch(current_batch_row_, &vec_row_batch, fetched_count);
+    float* col0 = (float*)&(vec_row_batch[0]);
+    float* col1 = (float*)&(vec_row_batch[1]);
+    vector<float> result(fetched_count);
+    float* ret = (float*)&result[0];
+    {
+      int i;
+      __m256 v1, v2, v3;
+      for (i = 0; i < fetched_count; i += 8) {
+        v1 = _mm256_loadu_ps((const float*)(col0 + i));
+        v2 = _mm256_loadu_ps((const float*)(col1 + i));
+        v3 = _mm256_div_ps(v1, v2);
+        _mm256_storeu_ps((float*)(ret + i), v3);
+      }
+      for (i = i - 8 + 1; i < fetched_count; ++i) {
+        ret[i] = col0[i] / col1[i];
+      }
+    }
+    for (int i = 0; i < fetched_count; ++i) {
+      result_row[0] = FloatVal(ret[i]);
+      RETURN_IF_ERROR(fetched_rows->AddOneRow(result_row, scales));
+      ++num_rows_fetched_;
+      ++current_batch_row_;
+    }
+  }
+
   ExprContext::FreeLocalAllocations(output_expr_ctxs_);
 
   // Update the result cache if necessary.

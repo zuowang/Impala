@@ -35,7 +35,7 @@ PROJECT(ASSEMBLER)
 #  - Wno-deprecated: gutil contains deprecated headers
 #  - pthread: enable multithreaded malloc
 #  - DBOOST_DATE_TIME_POSIX_TIME_STD_CONFIG: enable nanosecond precision for boost
-SET(CXX_COMMON_FLAGS "-Wall -Wno-sign-compare -Wno-unknown-pragmas -pthread")
+SET(CXX_COMMON_FLAGS "-mavx2 -ftree-vectorize -ftree-vectorizer-verbose=1 -Wall -Wno-sign-compare -Wno-unknown-pragmas -pthread")
 SET(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -fno-strict-aliasing")
 SET(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-deprecated -Wno-unused-local-typedefs")
 SET(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DBOOST_DATE_TIME_POSIX_TIME_STD_CONFIG")
