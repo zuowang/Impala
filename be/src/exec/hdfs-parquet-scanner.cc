@@ -312,7 +312,7 @@ class HdfsParquetScanner::ColumnReader : public HdfsParquetScanner::BaseColumnRe
       if (dict_decoder_.get() == NULL) {
         return Status("File corrupt. Missing dictionary page.");
       }
-      dict_decoder_->SetData(data, size);
+      dict_decoder_->SetData(data, size, current_page_header_.data_page_header.num_values);
     }
 
     // Check if we should disable the bitmap filter. We'll do this if the filter

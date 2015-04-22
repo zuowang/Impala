@@ -44,7 +44,7 @@ void ValidateDict(const vector<T>& values, int fixed_buffer_byte_size) {
   uint8_t dict_buffer[encoder.dict_encoded_size()];
   encoder.WriteDict(dict_buffer);
 
-  int data_buffer_len = encoder.EstimatedDataEncodedSize();
+  int data_buffer_len = 64 * 1024;
   uint8_t data_buffer[data_buffer_len];
   int data_len = encoder.WriteData(data_buffer, data_buffer_len);
   EXPECT_GT(data_len, 0);
@@ -52,7 +52,7 @@ void ValidateDict(const vector<T>& values, int fixed_buffer_byte_size) {
 
   DictDecoder<T> decoder(
       dict_buffer, encoder.dict_encoded_size(), fixed_buffer_byte_size);
-  decoder.SetData(data_buffer, data_len);
+  decoder.SetData(data_buffer, data_len, values.size());
   BOOST_FOREACH(T i, values) {
     T j;
     decoder.GetValue(&j);

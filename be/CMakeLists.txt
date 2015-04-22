@@ -50,7 +50,7 @@ SET(CXX_COVERAGE_FLAGS "-fprofile-arcs -ftest-coverage")
 #   -O3: Enable all compiler optimizations
 #   -g: Enable symbols for profiler tools
 #   -DNDEBUG: Turn off dchecks/asserts/debug only code.
-SET(CXX_FLAGS_DEBUG "-g -ggdb")
+SET(CXX_FLAGS_DEBUG "-g -ggdb -gdwarf-2")
 SET(CXX_FLAGS_RELEASE "-O3 -g -DNDEBUG")
 SET(CXX_FLAGS_ADDRESS_SANITIZER
     "-O1 -g -fsanitize=address -fno-omit-frame-pointer -DADDRESS_SANITIZER")
