@@ -25,6 +25,7 @@
 #include "runtime/mem-pool.h"
 #include "runtime/string-value.h"
 #include "util/rle-encoding.h"
+#include "util/fle-encoding.h"
 #include "util/runtime-profile.h"
 
 namespace impala {
@@ -166,13 +167,13 @@ class DictEncoder : public DictEncoderBase {
 class DictDecoderBase {
  public:
   // The rle encoded indices into the dictionary.
-  void SetData(uint8_t* buffer, int buffer_len) {
+  void SetData(uint8_t* buffer, int buffer_len, int num_values) {
     DCHECK_GT(buffer_len, 0);
     uint8_t bit_width = *buffer;
     DCHECK_GE(bit_width, 0);
     ++buffer;
     --buffer_len;
-    data_decoder_.reset(new RleDecoder(buffer, buffer_len, bit_width));
+    data_decoder_.reset(new FleDecoder(buffer, buffer_len, bit_width, num_values));
   }
 
   virtual ~DictDecoderBase() {}
@@ -180,7 +181,7 @@ class DictDecoderBase {
   virtual int num_entries() const = 0;
 
  protected:
-  boost::scoped_ptr<RleDecoder> data_decoder_;
+  boost::scoped_ptr<FleDecoder> data_decoder_;
 };
 
 template<typename T>
@@ -299,7 +300,7 @@ inline int DictEncoderBase::WriteData(uint8_t* buffer, int buffer_len) {
   ++buffer;
   --buffer_len;
 
-  RleEncoder encoder(buffer, buffer_len, bit_width());
+  FleEncoder encoder(buffer, buffer_len, bit_width());
   BOOST_FOREACH(int index, buffered_indices_) {
     if (!encoder.Put(index)) return -1;
   }
