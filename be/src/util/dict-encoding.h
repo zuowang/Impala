@@ -28,6 +28,8 @@
 #include "util/fle-encoding.h"
 #include "util/runtime-profile.h"
 
+using namespace impala_udf;
+
 namespace impala {
 
 // See the dictionary encoding section of https://github.com/Parquet/parquet-format.
@@ -159,6 +161,8 @@ class DictEncoder : public DictEncoderBase {
   // bucket gives a pointer to the location (i.e. chain) to add the value
   // so that the hash for value doesn't need to be recomputed.
   int AddToTable(const T& value, NodeIndex* bucket);
+
+  static bool NodeValLess(const Node& i, const Node& j);
 };
 
 // Decoder class for dictionary encoded data. This class does not allocate any
@@ -288,7 +292,42 @@ inline bool DictDecoder<Decimal16Value>::GetValue(Decimal16Value* value) {
 }
 
 template<typename T>
+inline bool DictEncoder<T>::NodeValLess(const Node& i, const Node& j) {
+  return i.value < j.value;
+}
+
+template <>
+inline bool DictEncoder<StringVal>::NodeValLess(const Node& i, const Node& j) {
+  int n = min(i.value.len, j.value.len);
+  int result = memcmp(&i.value.ptr[0], &j.value.ptr[0], n);
+  if (result == 0) return i.value.len < j.value.len;
+  return result < 0;
+}
+
+template <>
+inline bool DictEncoder<DecimalVal>::NodeValLess(const Node& i, const Node& j) {
+  return i.value.val16 < j.value.val16;
+}
+
+template <>
+inline bool DictEncoder<TimestampVal>::NodeValLess(const Node& i, const Node& j) {
+  if (i.value.date == j.value.date) return i.value.time_of_day < j.value.time_of_day;
+  else return i.value.date < j.value.date;
+}
+
+template<typename T>
 inline void DictEncoder<T>::WriteDict(uint8_t* buffer) {
+  for (int i = 0; i < nodes_.size(); ++i) {
+    nodes_[i].next = i;
+  }
+  sort(nodes_.begin(), nodes_.end(), DictEncoder<T>::NodeValLess);
+  vector<int> to_sorted_indice(nodes_.size());
+  for (int i = 0; i < nodes_.size(); ++i) {
+    to_sorted_indice[i] = nodes_[i].next;
+  }
+  for (int i = 0; i < nodes_.size(); ++i) {
+    buffered_indices_[i] = to_sorted_indice[buffered_indices_[i]];
+  }
   BOOST_FOREACH(const Node& node, nodes_) {
     buffer += ParquetPlainEncoder::Encode(buffer, encoded_value_size_, node.value);
   }
