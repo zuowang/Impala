@@ -24,7 +24,6 @@
 #include "util/fle-encoding.h"
 #include "util/bit-stream-utils.inline.h"
 
-#include "common/names.h"
 
 using namespace std;
 

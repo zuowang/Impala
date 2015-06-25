@@ -19,6 +19,7 @@
 
 #include "common/status.h"
 #include "exprs/expr-value.h"
+#include "exprs/simple-predicates.h"
 #include "udf/udf.h"
 
 using namespace impala_udf;
@@ -32,6 +33,7 @@ class RuntimeState;
 class RowDescriptor;
 class TColumnValue;
 class TupleRow;
+class SimplePredicate;
 
 // An ExprContext contains the state for the execution of a tree of Exprs, in particular
 // the FunctionContexts necessary for the expr tree. This allows for multi-threaded
@@ -122,6 +124,8 @@ class ExprContext {
   void FreeLocalAllocations();
   static void FreeLocalAllocations(const std::vector<ExprContext*>& ctxs);
   static void FreeLocalAllocations(const std::vector<FunctionContext*>& ctxs);
+
+  SimplePredicate* CreateSimplePredicates(RuntimeState* state);
 
   static const char* LLVM_CLASS_NAME;
 

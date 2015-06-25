@@ -17,10 +17,18 @@
 
 #include <immintrin.h>
 #include <math.h>
+#include <bitset>
+
+#include <boost/bind.hpp>
+#include <boost/dynamic_bitset.hpp>
+#include <boost/function.hpp>
 
 #include "common/compiler-util.h"
 #include "util/bit-stream-utils.inline.h"
 #include "util/bit-util.h"
+
+using namespace std;
+using namespace boost;
 
 namespace impala {
 
@@ -39,38 +47,105 @@ class FleDecoder {
     pcurrent_value8_ = reinterpret_cast<uint8_t*>(current_value_);
     pcurrent_value16_ = reinterpret_cast<uint16_t*>(current_value_);
 
-    fa[1] = &FleDecoder::Unpack_1;
-    fa[2] = &FleDecoder::Unpack_2;
-    fa[3] = &FleDecoder::Unpack_3;
-    fa[4] = &FleDecoder::Unpack_4;
-    fa[5] = &FleDecoder::Unpack_5;
-    fa[6] = &FleDecoder::Unpack_6;
-    fa[7] = &FleDecoder::Unpack_7;
-    fa[8] = &FleDecoder::Unpack_8;
-    fa[9] = &FleDecoder::Unpack_9;
-    fa[10] = &FleDecoder::Unpack_10;
-    fa[11] = &FleDecoder::Unpack_11;
-    fa[12] = &FleDecoder::Unpack_12;
-    fa[13] = &FleDecoder::Unpack_13;
-    fa[14] = &FleDecoder::Unpack_14;
-    fa[15] = &FleDecoder::Unpack_15;
-    fa[16] = &FleDecoder::Unpack_16;
-    fa[17] = &FleDecoder::Unpack_17;
-    fa[18] = &FleDecoder::Unpack_18;
-    fa[19] = &FleDecoder::Unpack_19;
-    fa[20] = &FleDecoder::Unpack_20;
-    fa[21] = &FleDecoder::Unpack_21;
-    fa[22] = &FleDecoder::Unpack_22;
-    fa[23] = &FleDecoder::Unpack_23;
-    fa[24] = &FleDecoder::Unpack_24;
-    fa[25] = &FleDecoder::Unpack_25;
-    fa[26] = &FleDecoder::Unpack_26;
-    fa[27] = &FleDecoder::Unpack_27;
-    fa[28] = &FleDecoder::Unpack_28;
-    fa[29] = &FleDecoder::Unpack_29;
-    fa[30] = &FleDecoder::Unpack_30;
-    fa[31] = &FleDecoder::Unpack_31;
-    fa[32] = &FleDecoder::Unpack_32;
+    switch(bit_width) {
+      case 1:
+        unpack_function_ = bind(mem_fn(&FleDecoder::Unpack_1), this);
+        break;
+      case 2:
+        unpack_function_ = bind(mem_fn(&FleDecoder::Unpack_2), this);
+        break;
+      case 3:
+        unpack_function_ = bind(mem_fn(&FleDecoder::Unpack_3), this);
+        break;
+      case 4:
+        unpack_function_ = bind(mem_fn(&FleDecoder::Unpack_4), this);
+        break;
+      case 5:
+        unpack_function_ = bind(mem_fn(&FleDecoder::Unpack_5), this);
+        break;
+      case 6:
+        unpack_function_ = bind(mem_fn(&FleDecoder::Unpack_6), this);
+        break;
+      case 7:
+        unpack_function_ = bind(mem_fn(&FleDecoder::Unpack_7), this);
+        break;
+      case 8:
+        unpack_function_ = bind(mem_fn(&FleDecoder::Unpack_8), this);
+        break;
+      case 9:
+        unpack_function_ = bind(mem_fn(&FleDecoder::Unpack_9), this);
+        break;
+      case 10:
+        unpack_function_ = bind(mem_fn(&FleDecoder::Unpack_10), this);
+        break;
+      case 11:
+        unpack_function_ = bind(mem_fn(&FleDecoder::Unpack_11), this);
+        break;
+      case 12:
+        unpack_function_ = bind(mem_fn(&FleDecoder::Unpack_12), this);
+        break;
+      case 13:
+        unpack_function_ = bind(mem_fn(&FleDecoder::Unpack_13), this);
+        break;
+      case 14:
+        unpack_function_ = bind(mem_fn(&FleDecoder::Unpack_14), this);
+        break;
+      case 15:
+        unpack_function_ = bind(mem_fn(&FleDecoder::Unpack_15), this);
+        break;
+      case 16:
+        unpack_function_ = bind(mem_fn(&FleDecoder::Unpack_16), this);
+        break;
+      case 17:
+        unpack_function_ = bind(mem_fn(&FleDecoder::Unpack_17), this);
+        break;
+      case 18:
+        unpack_function_ = bind(mem_fn(&FleDecoder::Unpack_18), this);
+        break;
+      case 19:
+        unpack_function_ = bind(mem_fn(&FleDecoder::Unpack_19), this);
+        break;
+      case 20:
+        unpack_function_ = bind(mem_fn(&FleDecoder::Unpack_20), this);
+        break;
+      case 21:
+        unpack_function_ = bind(mem_fn(&FleDecoder::Unpack_21), this);
+        break;
+      case 22:
+        unpack_function_ = bind(mem_fn(&FleDecoder::Unpack_22), this);
+        break;
+      case 23:
+        unpack_function_ = bind(mem_fn(&FleDecoder::Unpack_23), this);
+        break;
+      case 24:
+        unpack_function_ = bind(mem_fn(&FleDecoder::Unpack_24), this);
+        break;
+      case 25:
+        unpack_function_ = bind(mem_fn(&FleDecoder::Unpack_25), this);
+        break;
+      case 26:
+        unpack_function_ = bind(mem_fn(&FleDecoder::Unpack_26), this);
+        break;
+      case 27:
+        unpack_function_ = bind(mem_fn(&FleDecoder::Unpack_27), this);
+        break;
+      case 28:
+        unpack_function_ = bind(mem_fn(&FleDecoder::Unpack_28), this);
+        break;
+      case 29:
+        unpack_function_ = bind(mem_fn(&FleDecoder::Unpack_29), this);
+        break;
+      case 30:
+        unpack_function_ = bind(mem_fn(&FleDecoder::Unpack_30), this);
+        break;
+      case 31:
+        unpack_function_ = bind(mem_fn(&FleDecoder::Unpack_31), this);
+        break;
+      case 32:
+        unpack_function_ = bind(mem_fn(&FleDecoder::Unpack_32), this);
+        break;
+    }
+
     clr_mask = _mm256_set1_epi64x(0x0102040810204080);
     for (int i = 0; i < 8; ++i) {
       bitv[i] = _mm256_set1_epi8(0x01 << i);
@@ -88,15 +163,17 @@ class FleDecoder {
     shf_ret1_mask = _mm256_setr_epi64x(0x0380028001800080, 0x0780068005800480,
         0x0b800a8009800880, 0x0f800e800d800c80);
 
-//    rshift = _mm256_set_epi32(0, 1, 2, 3, 4, 5, 6, 7);
-//    clr_mask = _mm256_set_epi32(0x00000001, 0x00000001, 0x00000001,
-//        0x00000001, 0x00000001, 0x00000001, 0x00000001, 0x00000001);
   }
 
   FleDecoder() {}
 
   template<typename T>
   bool Get(T* val);
+
+  template<typename T>
+  bool Get(T* val, int skip_distance);
+
+  bool Skip(int skip_distance);
 
   void Unpack_1();
   void Unpack_2();
@@ -114,7 +191,6 @@ class FleDecoder {
   void Unpack_14();
   void Unpack_15();
   void Unpack_16();
-
   void Unpack_17();
   void Unpack_18();
   void Unpack_19();
@@ -133,11 +209,18 @@ class FleDecoder {
   void Unpack_32();
 
   void Unpack_16_32();
+
+  void Eq(int64_t num_rows, dynamic_bitset<>& skip_bitset, uint64_t value);
+  void Lt(int64_t num_rows, dynamic_bitset<>& skip_bitset, uint64_t value);
+  void Le(int64_t num_rows, dynamic_bitset<>& skip_bitset, uint64_t value);
+  void Gt(int64_t num_rows, dynamic_bitset<>& skip_bitset, uint64_t value);
+  void Ge(int64_t num_rows, dynamic_bitset<>& skip_bitset, uint64_t value);
+  void Clear() {}
+
+  int bit_width() { return bit_width_; }
  private:
-  typedef void(impala::FleDecoder::*PUNPACK)();
-  PUNPACK fa[33];
-//  __m256i rshift;
-//  __m256i clr_mask;
+  typedef boost::function<void()> UnpackFunction;
+  UnpackFunction unpack_function_;
   __m256i clr_mask;
   __m256i bitv[8];
   __m256i shf0_mask;
@@ -216,6 +299,11 @@ class FleEncoder {
 
   int Flush();
 
+  void Clear() {
+    count_ = 0;
+    buffer_end_ = buffer_;
+  }
+
   uint8_t* buffer() { return reinterpret_cast<uint8_t*>(buffer_); }
   int len() { return (buffer_end_ - buffer_) * 8;};
 
@@ -254,6 +342,72 @@ class FleEncoder {
 };
 
 template<typename T>
+inline bool FleDecoder::Get(T* val, int skip_distance) {
+  if (UNLIKELY(count_ == num_vals_ + 64)) return false;
+  if (UNLIKELY(count_ == 64)) {
+    count_ = skip_distance & (64 - 1);
+    int skip_64 = (skip_distance & ~(64 - 1)) >> 6;
+    buffer_end_ += bit_width_ * skip_64;
+    num_vals_ -= 64 * skip_64;
+    unpack_function_();
+    buffer_end_ += bit_width_;
+    num_vals_ -= 64;
+  } else {
+    skip_distance += count_;
+    count_ = skip_distance & (64 - 1);
+    if (skip_distance >= 64) {
+      int skip_64 = ((skip_distance & ~(64 - 1)) >> 6) - 1;
+      buffer_end_ += bit_width_ * skip_64;
+      num_vals_ -= 64 * skip_64;
+      unpack_function_();
+      buffer_end_ += bit_width_;
+      num_vals_ -= 64;
+    }
+  }
+
+  if (bit_width_ <= 8) {
+    *val = pcurrent_value8_[count_];
+  } else if (bit_width_ <= 16) {
+    *val = pcurrent_value16_[count_];
+  } else {
+    *val = current_value_[count_];
+  }
+
+  if (*val == 0) {
+    *val = 0;
+  }
+  ++count_;
+
+  return true;
+}
+
+inline bool FleDecoder::Skip(int skip_distance) {
+  if (UNLIKELY(count_ == num_vals_ + 64)) return false;
+  if (UNLIKELY(count_ == 64)) {
+    count_ = skip_distance & (64 - 1);
+    int skip_64 = (skip_distance & ~(64 - 1)) >> 6;
+    buffer_end_ += bit_width_ * skip_64;
+    num_vals_ -= 64 * skip_64;
+    unpack_function_();
+    buffer_end_ += bit_width_;
+    num_vals_ -= 64;
+  } else {
+    skip_distance += count_;
+    count_ = skip_distance & (64 - 1);
+    if (skip_distance >= 64) {
+      int skip_64 = ((skip_distance & ~(64 - 1)) >> 6) - 1;
+      buffer_end_ += bit_width_ * skip_64;
+      num_vals_ -= 64 * skip_64;
+      unpack_function_();
+      buffer_end_ += bit_width_;
+      num_vals_ -= 64;
+    }
+  }
+
+  return true;
+}
+
+template<typename T>
 inline bool FleDecoder::Get(T* val) {
   if (UNLIKELY(count_ == 64 || (num_vals_ < 0 && count_ == num_vals_ + 64))) {
     if (num_vals_ <= 0) return false;
@@ -282,7 +436,8 @@ inline bool FleDecoder::Get(T* val) {
 //    }
 
 //    memset(current_value_, 0, 64 * 4);
-    (this->*fa[bit_width_])();
+    unpack_function_();
+//    (this->*fa[bit_width_])();
 /*
     if (bit_width_ == 1) {
       __m256i buf = _mm256_loadu_si256((__m256i const*)buffer_end_);
@@ -406,6 +561,10 @@ inline bool FleDecoder::Get(T* val) {
     *val = pcurrent_value16_[count_];
   } else {
     *val = current_value_[count_];
+  }
+
+  if (*val == 0) {
+    *val = 0;
   }
 
 //  *val = current_value_[count_];
@@ -7806,6 +7965,284 @@ inline void FleDecoder::Unpack_11_32() {
 }
 
 */
+
+inline void FleDecoder::Eq(int64_t num_rows, dynamic_bitset<>& skip_bitset,
+    uint64_t value) {
+  vector<uint64_t> C;
+  for (int i = 0; i < bit_width_; ++i) {
+    if (value & 0x01 << i) {
+      C.push_back(~0x0);
+    } else {
+      C.push_back(0x0);
+    }
+  }
+
+  for (int i = count_; i != 64 && (i != 64+ num_vals_) && num_rows > 0; ++i, --num_rows) {
+    if (bit_width_ <= 8) {
+      skip_bitset.push_back(pcurrent_value8_[i] == value);
+    } else if (bit_width_ <= 16) {
+      skip_bitset.push_back(pcurrent_value16_[i] == value);
+    } else {
+      skip_bitset.push_back(current_value_[i] == value);
+    }
+  }
+//  if (count_ != 64) {
+//    uint64_t Meq = ~0x0;
+//    int i = bit_width_ - 1;
+//    uint64_t* tmp_buffer_end = buffer_end_ - bit_width_;
+//    for (; i >= 0; --i) {
+//      Meq = Meq & ~(tmp_buffer_end[i] ^ C[i]);
+//    }
+//    std::bitset<64> tmp_bitset(Meq);
+//    if (count_ + num_rows < 64) {
+//      for (int i = count_; i < count_ + num_rows; ++i) {
+//        skip_bitset.push_back(tmp_bitset[63 - i]);
+//      }
+//      return;
+//    }
+//    for (int i = count_; i < 64; ++i) {
+//      skip_bitset.push_back(tmp_bitset[63 - i]);
+//    }
+//    num_rows -= (64 - count_);
+//  }
+
+  uint64_t j = 0;
+  while (num_rows > 0) {
+    uint64_t Meq = ~0x0;
+    for (int i = 0; i < bit_width_; ++i, ++j) {
+      Meq = Meq & ~(buffer_end_[j] ^ C[i]);
+    }
+    if (num_rows < 64) {
+      std::bitset<64> tmp_bitset(Meq);
+      for (int i = 0; i < num_rows; ++i) {
+        skip_bitset.push_back(tmp_bitset[63 - i]);
+      }
+      break;
+    }
+    skip_bitset.append(Meq);
+    num_rows -= 64;
+  }
+}
+
+inline void FleDecoder::Lt(int64_t num_rows, dynamic_bitset<>& skip_bitset,
+    uint64_t value) {
+  vector<uint64_t> C;
+  for (int i = 0; i < bit_width_; ++i) {
+    if (value & 0x01 << i) {
+      C.push_back(~0x0);
+    } else {
+      C.push_back(0x0);
+    }
+  }
+  if (count_ != 64) {
+    uint64_t Mlt = 0x0;
+    uint64_t Meq = ~0x0;
+    int i = bit_width_ - 1;
+    uint64_t* tmp_buffer_end = buffer_end_ - bit_width_;
+    for (; i >= 0; --i) {
+      Mlt = Mlt | (Meq & C[i] & ~tmp_buffer_end[i]);
+      Meq = Meq & ~(tmp_buffer_end[i] ^ C[i]);
+    }
+    std::bitset<64> tmp_bitset(Mlt);
+    if (count_ + num_rows < 64) {
+      for (int i = count_; i < count_ + num_rows; ++i) {
+        skip_bitset.push_back(tmp_bitset[63 - i]);
+      }
+      return;
+    }
+    for (int i = count_; i < 64; ++i) {
+      skip_bitset.push_back(tmp_bitset[63 - i]);
+    }
+    num_rows -= (64 - count_);
+  }
+
+  uint64_t start_idx = 0;
+  while (num_rows > 0) {
+    uint64_t Mlt = 0x0;
+    uint64_t Meq = ~0x0;
+    int i = bit_width_ - 1;
+    int j = start_idx + bit_width_ - 1;
+    for (; i >= 0; --i, --j) {
+      Mlt = Mlt | (Meq & C[i] & ~buffer_end_[j]);
+      Meq = Meq & ~(buffer_end_[j] ^ C[i]);
+    }
+    start_idx += bit_width_;
+    if (num_rows < 64) {
+      std::bitset<64> tmp_bitset(Mlt);
+      for (int i = 0; i < num_rows; ++i) {
+        skip_bitset.push_back(tmp_bitset[63 - i]);
+      }
+      break;
+    }
+    skip_bitset.append(Mlt);
+    num_rows -= 64;
+  }
+}
+
+inline void FleDecoder::Le(int64_t num_rows, dynamic_bitset<>& skip_bitset,
+    uint64_t value) {
+  vector<uint64_t> C;
+  for (int i = 0; i < bit_width_; ++i) {
+    if (value & 0x01 << i) {
+      C.push_back(~0x0);
+    } else {
+      C.push_back(0x0);
+    }
+  }
+  if (count_ != 64) {
+    uint64_t Mlt = 0x0;
+    uint64_t Meq = ~0x0;
+    int i = bit_width_ - 1;
+    uint64_t* tmp_buffer_end = buffer_end_ - bit_width_;
+    for (; i >= 0; --i) {
+      Mlt = Mlt | (Meq & C[i] & ~tmp_buffer_end[i]);
+      Meq = Meq & ~(tmp_buffer_end[i] ^ C[i]);
+    }
+    std::bitset<64> tmp_bitset(Mlt|Meq);
+    if (count_ + num_rows < 64) {
+      for (int i = count_; i < count_ + num_rows; ++i) {
+        skip_bitset.push_back(tmp_bitset[63 - i]);
+      }
+      return;
+    }
+    for (int i = count_; i < 64; ++i) {
+      skip_bitset.push_back(tmp_bitset[63 - i]);
+    }
+    num_rows -= (64 - count_);
+  }
+
+  uint64_t start_idx = 0;
+  while (num_rows > 0) {
+    uint64_t Mlt = 0x0;
+    uint64_t Meq = ~0x0;
+    int i = bit_width_ - 1;
+    int j = start_idx + bit_width_ - 1;
+    for (; i >= 0; --i, --j) {
+      Mlt = Mlt | (Meq & C[i] & ~buffer_end_[j]);
+      Meq = Meq & ~(buffer_end_[j] ^ C[i]);
+    }
+    start_idx += bit_width_;
+    if (num_rows < 64) {
+      std::bitset<64> tmp_bitset(Mlt|Meq);
+      for (int i = 0; i < num_rows; ++i) {
+        skip_bitset.push_back(tmp_bitset[63 - i]);
+      }
+      break;
+    }
+    skip_bitset.append(Mlt|Meq);
+    num_rows -= 64;
+  }
+}
+
+inline void FleDecoder::Gt(int64_t num_rows, dynamic_bitset<>& skip_bitset,
+    uint64_t value) {
+  vector<uint64_t> C;
+  for (int i = 0; i < bit_width_; ++i) {
+    if (value & 0x01 << i) {
+      C.push_back(~0x0);
+    } else {
+      C.push_back(0x0);
+    }
+  }
+  if (count_ != 64) {
+    uint64_t Mgt = 0x0;
+    uint64_t Meq = ~0x0;
+    int i = bit_width_ - 1;
+    uint64_t* tmp_buffer_end = buffer_end_ - bit_width_;
+    for (; i >= 0; --i) {
+      Mgt = Mgt | (Meq & ~C[i] & tmp_buffer_end[i]);
+      Meq = Meq & ~(tmp_buffer_end[i] ^ C[i]);
+    }
+    std::bitset<64> tmp_bitset(Mgt);
+    if (count_ + num_rows < 64) {
+      for (int i = count_; i < count_ + num_rows; ++i) {
+        skip_bitset.push_back(tmp_bitset[63 - i]);
+      }
+      return;
+    }
+    for (int i = count_; i < 64; ++i) {
+      skip_bitset.push_back(tmp_bitset[63 - i]);
+    }
+    num_rows -= (64 - count_);
+  }
+  uint64_t start_idx = 0;
+  while (num_rows > 0) {
+    uint64_t Mgt = 0x0;
+    uint64_t Meq = ~0x0;
+    int i = bit_width_ - 1;
+    int j = start_idx + bit_width_ - 1;
+    for (; i >= 0; --i, --j) {
+      Mgt = Mgt | (Meq & ~C[i] & buffer_end_[j]);
+      Meq = Meq & ~(buffer_end_[j] ^ C[i]);
+    }
+    start_idx += bit_width_;
+    if (num_rows < 64) {
+      std::bitset<64> tmp_bitset(Mgt);
+      for (int i = 0; i < num_rows; ++i) {
+        skip_bitset.push_back(tmp_bitset[63 - i]);
+      }
+      break;
+    }
+    skip_bitset.append(Mgt);
+    num_rows -= 64;
+  }
+}
+
+inline void FleDecoder::Ge(int64_t num_rows, dynamic_bitset<>& skip_bitset,
+    uint64_t value) {
+  vector<uint64_t> C;
+  for (int i = 0; i < bit_width_; ++i) {
+    if (value & 0x01 << i) {
+      C.push_back(~0x0);
+    } else {
+      C.push_back(0x0);
+    }
+  }
+  if (count_ != 64) {
+    uint64_t Mgt = 0x0;
+    uint64_t Meq = ~0x0;
+    int i = bit_width_ - 1;
+    uint64_t* tmp_buffer_end = buffer_end_ - bit_width_;
+    for (; i >= 0; --i) {
+      Mgt = Mgt | (Meq & ~C[i] & tmp_buffer_end[i]);
+      Meq = Meq & ~(tmp_buffer_end[i] ^ C[i]);
+    }
+    std::bitset<64> tmp_bitset(Mgt|Meq);
+    if (count_ + num_rows < 64) {
+      for (int i = count_; i < count_ + num_rows; ++i) {
+        skip_bitset.push_back(tmp_bitset[63 - i]);
+      }
+      return;
+    }
+    for (int i = count_; i < 64; ++i) {
+      skip_bitset.push_back(tmp_bitset[63 - i]);
+    }
+    num_rows -= (64 - count_);
+  }
+
+  uint64_t start_idx = 0;
+  while (num_rows > 0) {
+    uint64_t Mgt = 0x0;
+    uint64_t Meq = ~0x0;
+    int i = bit_width_ - 1;
+    int j = start_idx + bit_width_ - 1;
+    for (; i >= 0; --i, --j) {
+      Mgt = Mgt | (Meq & ~C[i] & buffer_end_[j]);
+      Meq = Meq & ~(buffer_end_[j] ^ C[i]);
+    }
+    start_idx += bit_width_;
+    if (num_rows < 64) {
+      std::bitset<64> tmp_bitset(Mgt|Meq);
+      for (int i = 0; i < num_rows; ++i) {
+        skip_bitset.push_back(tmp_bitset[63 - i]);
+      }
+      break;
+    }
+    skip_bitset.append(Mgt|Meq);
+    num_rows -= 64;
+  }
+}
+
 
 inline bool FleEncoder::Put(uint64_t value) {
   DCHECK(bit_width_ == 64 || value < (1LL << bit_width_));

@@ -106,6 +106,7 @@ class Expr;
 class IsNullExpr;
 class LlvmCodeGen;
 class ObjectPool;
+class SimplePredicate;
 class RowDescriptor;
 class RuntimeState;
 class TColumnValue;
@@ -228,6 +229,10 @@ class Expr {
   // by using dlsym. The compiler must think this function is callable to
   // not strip these symbols.
   static void InitBuiltinsDummy();
+
+  virtual SimplePredicate* CreateSimplePredicates(RuntimeState* state) {
+    return NULL;
+  }
 
   static const char* LLVM_CLASS_NAME;
 

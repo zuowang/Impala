@@ -336,3 +336,8 @@ TimestampVal ExprContext::GetTimestampVal(TupleRow* row) {
 DecimalVal ExprContext::GetDecimalVal(TupleRow* row) {
   return root_->GetDecimalVal(this, row);
 }
+
+SimplePredicate* ExprContext::CreateSimplePredicates(RuntimeState* state) {
+  return root_->CreateSimplePredicates(state);
+}
+
