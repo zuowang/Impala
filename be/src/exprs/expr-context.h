@@ -32,6 +32,8 @@ class RuntimeState;
 class RowDescriptor;
 class TColumnValue;
 class TupleRow;
+class BaseColumnReader;
+class SimplePredicates;
 
 // An ExprContext contains the state for the execution of a tree of Exprs, in particular
 // the FunctionContexts necessary for the expr tree. This allows for multi-threaded
@@ -122,6 +124,8 @@ class ExprContext {
   void FreeLocalAllocations();
   static void FreeLocalAllocations(const std::vector<ExprContext*>& ctxs);
   static void FreeLocalAllocations(const std::vector<FunctionContext*>& ctxs);
+
+  SimplePredicates* CreateSimplePredicates(vector<BaseColumnReader*>& column_readers);
 
   static const char* LLVM_CLASS_NAME;
 

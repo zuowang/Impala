@@ -40,6 +40,7 @@
 #include "util/debug-util.h"
 #include "util/error-util.h"
 #include "util/dict-encoding.h"
+#include "util/fle-encoding.h"
 #include "util/rle-encoding.h"
 #include "util/runtime-profile.h"
 #include "rpc/thrift-util.h"
@@ -126,6 +127,7 @@ HdfsParquetScanner::HdfsParquetScanner(HdfsScanNode* scan_node, RuntimeState* st
       dictionary_pool_(new MemPool(scan_node->mem_tracker())),
       assemble_rows_timer_(scan_node_->materialize_tuple_timer()) {
   assemble_rows_timer_.Stop();
+  if (!CreateSimplePredicates()) simple_predicates_.clear();
 }
 
 HdfsParquetScanner::~HdfsParquetScanner() {
@@ -171,6 +173,7 @@ class HdfsParquetScanner::BaseColumnReader {
     if (metadata_ == NULL) return THdfsCompression::NONE;
     return PARQUET_TO_IMPALA_CODEC[metadata_->codec];
   }
+  int64_t num_values_read() const { return num_values_read_; }
 
   // Read the next value into tuple for this column.  Returns false if there are no
   // more values in the file.
@@ -213,6 +216,7 @@ class HdfsParquetScanner::BaseColumnReader {
 
   // Decoder for definition.  Only one of these is valid at a time, depending on
   // the data page metadata.
+  scoped_ptr<FleDecoder> fle_def_levels_;
   RleDecoder rle_def_levels_;
   BitReader bit_packed_def_levels_;
 
@@ -276,6 +280,105 @@ class HdfsParquetScanner::BaseColumnReader {
   // Subclass must implement this.
   // TODO: we need to remove this with codegen.
   virtual bool ReadSlot(void* slot, MemPool* pool, bool* conjuncts_failed) = 0;
+
+  template<typename T>
+  bool Eq(int64_t num_rows, vector<int64_t>& skip_bit_vec, T& val) {
+    if (max_def_level() == 0) {
+      return dict_decoder_->Eq(num_rows, skip_bit_vec, val);
+    }
+    vector<uint64_t> skip_bit_vec;
+    if (!fle_def_levels_->Eq(num_rows, skip_bit_vec, max_def_level())) return false;
+    int64_t limit_rows = BitCount(skip_bit_vec);
+    vector<uint64_t> data_bit_vec;
+    if (!dict_decoder_->Eq(limit_rows, data_bit_vec, val)) return false;
+    IntersectBitVec(skip_bit_vec, data_bit_vec);
+    return true;
+  }
+
+  template<typename T>
+  bool Lt(int64_t num_rows, vector<int64_t>& skip_bit_vec, T& val) {
+    if (max_def_level() == 0) {
+      return dict_decoder_->Lt(num_rows, skip_bit_vec, val);
+    }
+    vector<uint64_t> skip_bit_vec;
+    if (!fle_def_levels_->Lt(num_rows, skip_bit_vec, max_def_level())) return false;
+    int64_t limit_rows = BitCount(skip_bit_vec);
+    vector<uint64_t> data_bit_vec;
+    if (!dict_decoder_->Lt(limit_rows, data_bit_vec, val)) return false;
+    IntersectBitVec(skip_bit_vec, data_bit_vec);
+    return true;
+  }
+
+  template<typename T>
+  bool Le(int64_t num_rows, vector<int64_t>& skip_bit_vec, T& val) {
+    if (max_def_level() == 0) {
+      return dict_decoder_->Le(num_rows, skip_bit_vec, val);
+    }
+    vector<uint64_t> skip_bit_vec;
+    if (!fle_def_levels_->Le(num_rows, skip_bit_vec, max_def_level())) return false;
+    int64_t limit_rows = BitCount(skip_bit_vec);
+    vector<uint64_t> data_bit_vec;
+    if (!dict_decoder_->Le(limit_rows, data_bit_vec, val)) return false;
+    IntersectBitVec(skip_bit_vec, data_bit_vec);
+    return true;
+  }
+
+  template<typename T>
+  bool Gt(int64_t num_rows, vector<int64_t>& skip_bit_vec, T& val) {
+    if (max_def_level() == 0) {
+      return dict_decoder_->Gt(num_rows, skip_bit_vec, val);
+    }
+    vector<uint64_t> skip_bit_vec;
+    if (!fle_def_levels_->Gt(num_rows, skip_bit_vec, max_def_level())) return false;
+    int64_t limit_rows = BitCount(skip_bit_vec);
+    vector<uint64_t> data_bit_vec;
+    if (!dict_decoder_->Gt(limit_rows, data_bit_vec, val)) return false;
+    IntersectBitVec(skip_bit_vec, data_bit_vec);
+    return true;
+  }
+
+  template<typename T>
+  bool Ge(int64_t num_rows, vector<int64_t>& skip_bit_vec, T& val) {
+    if (max_def_level() == 0) {
+      return dict_decoder_->Ge(num_rows, skip_bit_vec, val);
+    }
+    vector<uint64_t> skip_bit_vec;
+    if (!fle_def_levels_->Ge(num_rows, skip_bit_vec, max_def_level())) return false;
+    int64_t limit_rows = BitCount(skip_bit_vec);
+    vector<uint64_t> data_bit_vec;
+    if (!dict_decoder_->Ge(limit_rows, data_bit_vec, val)) return false;
+    IntersectBitVec(skip_bit_vec, data_bit_vec);
+    return true;
+  }
+
+  int64_t BitCount(vector<int64_t>& bit_vec) {
+    int64_t set_bits = 0;
+    for (int i = 0; i < bit_vec.size(); ++i) {
+      for (int j = 63; j >=0; --j) {
+        if (bit_vec[i] & 0x01 << j)  ++set_bits;
+      }
+    }
+    return set_bits;
+  }
+
+  void IntersectBitVec(vector<int64_t>& bit_vec, vector<int64_t>& sub_bit_vec) {
+    int data_idx = 0,
+    int bit_idx = 63;
+    for (int i = 0; i < bit_vec.size(); ++i) {
+      for (int j = 63; j >=0; --j) {
+        if (bit_vec[i] & 0x01 << j) {
+          if (!(sub_bit_vec[data_idx] & 0x01 << bit_idx)) {
+            bit_vec[i] &= ~(0x01 << j);
+          }
+          if (--bit_idx < 0) {
+            --data_idx;
+            bit_idx = 63;
+          }
+        }
+      }
+    }
+  }
+
 };
 
 // Per column type reader.
@@ -308,7 +411,9 @@ class HdfsParquetScanner::ColumnReader : public HdfsParquetScanner::BaseColumnRe
 
   virtual Status InitDataPage(uint8_t* data, int size) {
     if (current_page_header_.data_page_header.encoding ==
-          parquet::Encoding::PLAIN_DICTIONARY) {
+          parquet::Encoding::PLAIN_DICTIONARY ||
+          current_page_header_.data_page_header.encoding ==
+          parquet::Encoding::FLE_DICTIONARY) {
       if (dict_decoder_.get() == NULL) {
         return Status("File corrupt. Missing dictionary page.");
       }
@@ -331,7 +436,8 @@ class HdfsParquetScanner::ColumnReader : public HdfsParquetScanner::BaseColumnRe
     bool result = true;
     T val;
     T* val_ptr = needs_conversion_ ? &val : reinterpret_cast<T*>(slot);
-    if (page_encoding == parquet::Encoding::PLAIN_DICTIONARY) {
+    if (page_encoding == parquet::Encoding::PLAIN_DICTIONARY ||
+        page_encoding == parquet::Encoding::FLE_DICTIONARY) {
       result = dict_decoder_->GetValue(val_ptr);
     } else {
       DCHECK(page_encoding == parquet::Encoding::PLAIN);
@@ -339,12 +445,17 @@ class HdfsParquetScanner::ColumnReader : public HdfsParquetScanner::BaseColumnRe
     }
     if (needs_conversion_) ConvertSlot(&val, reinterpret_cast<T*>(slot), pool);
     ++rows_returned_;
-    if (!*conjuncts_failed && bitmap_filter_ != NULL) {
-      uint32_t h = RawValue::GetHashValue(slot, slot_desc()->type(), hash_seed_);
-      *conjuncts_failed = !bitmap_filter_->Get<true>(h);
-      ++bitmap_filter_rows_rejected_;
-    }
+//    if (!*conjuncts_failed && bitmap_filter_ != NULL) {
+//      uint32_t h = RawValue::GetHashValue(slot, slot_desc()->type(), hash_seed_);
+//      *conjuncts_failed = !bitmap_filter_->Get<true>(h);
+//      ++bitmap_filter_rows_rejected_;
+//    }
     return result;
+  }
+
+  virtual void EvalOp(string& function_name, T& v, int64_t num_rows,
+      vector<int64_t>& skip_bit_vec, int flag) {
+    return dict_decoder_->EvalOp(function_name, v, num_rows, skip_bit_vec, flag);
   }
 
  private:
@@ -618,7 +729,8 @@ Status HdfsParquetScanner::BaseColumnReader::ReadDataPage() {
       }
       if (dict_header != NULL &&
           dict_header->encoding != parquet::Encoding::PLAIN &&
-          dict_header->encoding != parquet::Encoding::PLAIN_DICTIONARY) {
+          dict_header->encoding != parquet::Encoding::PLAIN_DICTIONARY &&
+          dict_header->encoding != parquet::Encoding::FLE_DICTIONARY) {
         return Status("Only PLAIN and PLAIN_DICTIONARY encodings are supported "
             "for dictionary pages.");
       }
@@ -690,6 +802,15 @@ Status HdfsParquetScanner::BaseColumnReader::ReadDataPage() {
           rle_def_levels_ = RleDecoder(data_, num_definition_bytes, bit_width);
           break;
         }
+        case parquet::Encoding::FLE: {
+          if (!ReadWriteUtil::Read(&data_, &data_size, &num_definition_bytes, &status)) {
+            return status;
+          }
+          int bit_width = BitUtil::Log2(max_def_level() + 1);
+          fle_def_levels_.reset(FleDecoder::NewFleDecoder(data_, num_definition_bytes,
+              bit_width, current_page_header_.data_page_header.num_values));
+          break;
+        }
         case parquet::Encoding::BIT_PACKED:
           num_definition_bytes = BitUtil::Ceil(num_buffered_values_, 8);
           bit_packed_def_levels_ = BitReader(data_, num_definition_bytes);
@@ -732,6 +853,9 @@ inline int HdfsParquetScanner::BaseColumnReader::ReadDefinitionLevel() {
       valid = bit_packed_def_levels_.GetValue(1, &definition_level);
       break;
     }
+    case parquet::Encoding::FLE:
+      valid = fle_def_levels_->Get(&definition_level);
+      break;
     default:
       DCHECK(false);
   }
@@ -740,16 +864,16 @@ inline int HdfsParquetScanner::BaseColumnReader::ReadDefinitionLevel() {
 }
 
 inline bool HdfsParquetScanner::BaseColumnReader::ReadValue(
-    MemPool* pool, Tuple* tuple, bool* conjuncts_failed) {
-  if (num_buffered_values_ == 0) {
-    parent_->assemble_rows_timer_.Stop();
-    parent_->parse_status_ = ReadDataPage();
-    // We don't return Status objects as parameters because they are too
-    // expensive for per row/per col calls.  If ReadDataPage failed,
-    // return false to indicate this column reader is done.
-    if (num_buffered_values_ == 0 || !parent_->parse_status_.ok()) return false;
-    parent_->assemble_rows_timer_.Start();
-  }
+    MemPool* pool, Tuple* tuple, int skip_distance) {
+//  if (num_buffered_values_ == 0) {
+//    parent_->assemble_rows_timer_.Stop();
+//    parent_->parse_status_ = ReadDataPage();
+//    // We don't return Status objects as parameters because they are too
+//    // expensive for per row/per col calls.  If ReadDataPage failed,
+//    // return false to indicate this column reader is done.
+//    if (num_buffered_values_ == 0 || !parent_->parse_status_.ok()) return false;
+//    parent_->assemble_rows_timer_.Start();
+//  }
 
   --num_buffered_values_;
   int definition_level = ReadDefinitionLevel();
@@ -819,43 +943,146 @@ Status HdfsParquetScanner::AssembleRows(int row_group_idx) {
 
     int num_to_commit = 0;
     if (num_column_readers > 0) {
-      for (int i = 0; i < num_rows; ++i) {
-        bool conjuncts_failed = false;
-        InitTuple(template_tuple_, tuple);
+      // Assemble column by column.
+      if (conjunct_ctxs_.size() == 0) {
+        Tuple* firstTuple = tuple;
         for (int c = 0; c < num_column_readers; ++c) {
-          if (!column_readers_[c]->ReadValue(pool, tuple, &conjuncts_failed)) {
-            assemble_rows_timer_.Stop();
-            // This column is complete and has no more data.  This indicates
-            // we are done with this row group.
-            // For correctly formed files, this should be the first column we
-            // are reading.
-            DCHECK(c == 0 || !parse_status_.ok())
-              << "c=" << c << " " << parse_status_.GetDetail();;
-            COUNTER_ADD(scan_node_->rows_read_counter(), i);
-            RETURN_IF_ERROR(CommitRows(num_to_commit));
+          tuple = firstTuple;
+          if (c == 0) InitTuple(template_tuple_, tuple);
+          for (int i = 0; i < num_rows; ++i) {
+            if (!column_readers_[c]->ReadValue(pool, tuple, NULL)) {
+              assemble_rows_timer_.Stop();
+              // This column is complete and has no more data.  This indicates
+              // we are done with this row group.
+              // For correctly formed files, this should be the first column we
+              // are reading.
+              DCHECK(!parse_status_.ok()) << " " << parse_status_.GetDetail();
+              COUNTER_ADD(scan_node_->rows_read_counter(), i);
+              RETURN_IF_ERROR(CommitRows(num_to_commit));
 
-            // If we reach this point, it means that we reached the end of file for
-            // this column. Test if the expected number of rows from metadata matches
-            // the actual number of rows in the file.
-            rows_read += i;
-            if (rows_read != expected_rows_in_group) {
-              HdfsParquetScanner::BaseColumnReader* reader = column_readers_[c];
-              DCHECK_NOTNULL(reader->stream_);
+              // If we reach this point, it means that we reached the end of file for
+              // this column. Test if the expected number of rows from metadata matches
+              // the actual number of rows in the file.
+              rows_read += i;
+              if (rows_read != expected_rows_in_group) {
+                HdfsParquetScanner::BaseColumnReader* reader = column_readers_[c];
+                DCHECK_NOTNULL(reader->stream_);
 
-              ErrorMsg msg(TErrorCode::PARQUET_GROUP_ROW_COUNT_ERROR,
-                 reader->stream_->filename(), row_group_idx,
-                 expected_rows_in_group, rows_read);
-              LOG_OR_RETURN_ON_ERROR(msg, scan_node_->runtime_state());
+                ErrorMsg msg(TErrorCode::PARQUET_GROUP_ROW_COUNT_ERROR,
+                   reader->stream_->filename(), row_group_idx,
+                   expected_rows_in_group, rows_read);
+                LOG_OR_RETURN_ON_ERROR(msg, scan_node_->runtime_state());
+              }
+              return parse_status_;
             }
-            return parse_status_;
+            tuple = next_tuple(tuple);
           }
         }
-        if (conjuncts_failed) continue;
-        row->SetTuple(scan_node_->tuple_idx(), tuple);
-        if (EvalConjuncts(row)) {
+
+        tuple = firstTuple;
+        for (int i = 0; i < num_rows; ++i) {
+          row->SetTuple(scan_node_->tuple_idx(), tuple);
           row = next_row(row);
           tuple = next_tuple(tuple);
           ++num_to_commit;
+        }
+      } else {
+        vector<uint64_t> skip_bit_vec;
+        vector<uint32_t> skip_distance_vec;
+        if (simple_predicates_.size() != 0) {
+          while (num_rows > 0) {
+            int64_t limit_rows = num_rows;
+            for (int c = 0; c < column_readers_.size(); ++c) {
+              if (column_readers_[c].num_values_read() == 0) {
+                assemble_rows_timer_.Stop();
+                parent_status_ = column_readers_[c].ReadDataPage();
+                if (column_readers_[c].num_values_read() == 0 || !parent_status_.ok()) {
+                  return parent_status_;
+                }
+                assemble_rows_timer_.Start();
+              }
+              if (column_readers_[c].num_values_read() < limit_rows) {
+                limit_rows = column_readers_[c].num_values_read();
+              }
+            }
+
+            if (!simple_predicates_->GetBitVec(limit_rows, skip_bit_vec)) {
+              return parent_status_;
+            }
+            // Revisit this to improve it with AVX.
+            int skip_distance = 0;
+            for (int i = 0; i < skip_bit_vec.size(); ++i) {
+              if (skip_bit_vec[i] == 0) skip_distance += 64;
+              for (int j = 0; j < 64; ++j) {
+                if (skip_bit_vec[i] & 0x01 << j) {
+                  skip_distance_vec.push_back(skip_distance);
+                  skip_distance = 0;
+                } else {
+                  ++skip_distance;
+                }
+              }
+            }
+
+            Tuple* firstTuple = tuple;
+            for (int c = 0; c < num_column_readers; ++c) {
+              tuple = firstTuple;
+              if (c == 0) InitTuple(template_tuple_, tuple);
+              for (int i = 0; i < skip_distance_vec_.size(); ++i) {
+                column_readers_[c]->ReadValue(pool, tuple, skip_distance_vec_[i]);
+                tuple = next_tuple(tuple);
+              }
+            }
+
+            for (int i = 0; i < skip_distance_vec_.size(); ++i) {
+              row->SetTuple(scan_node_->tuple_idx(), tuple);
+              row = next_row(row);
+              tuple = next_tuple(tuple);
+              ++num_to_commit;
+            }
+            num_rows -= skip_distance_vec.size();
+            if (num_rows <= 0) break;
+          }
+          //TODO Handle error status.
+        } else {
+          for (int i = 0; i < num_rows; ++i) {
+            bool conjuncts_failed = false;
+            InitTuple(template_tuple_, tuple);
+            for (int c = 0; c < num_column_readers; ++c) {
+              if (!column_readers_[c]->ReadValue(pool, tuple, &conjuncts_failed)) {
+                assemble_rows_timer_.Stop();
+                // This column is complete and has no more data.  This indicates
+                // we are done with this row group.
+                // For correctly formed files, this should be the first column we
+                // are reading.
+                DCHECK(c == 0 || !parse_status_.ok())
+                  << "c=" << c << " " << parse_status_.GetDetail();;
+                COUNTER_ADD(scan_node_->rows_read_counter(), i);
+                RETURN_IF_ERROR(CommitRows(num_to_commit));
+
+                // If we reach this point, it means that we reached the end of file for
+                // this column. Test if the expected number of rows from metadata matches
+                // the actual number of rows in the file.
+                rows_read += i;
+                if (rows_read != expected_rows_in_group) {
+                  HdfsParquetScanner::BaseColumnReader* reader = column_readers_[c];
+                  DCHECK_NOTNULL(reader->stream_);
+
+                  ErrorMsg msg(TErrorCode::PARQUET_GROUP_ROW_COUNT_ERROR,
+                     reader->stream_->filename(), row_group_idx,
+                     expected_rows_in_group, rows_read);
+                  LOG_OR_RETURN_ON_ERROR(msg, scan_node_->runtime_state());
+                }
+                return parse_status_;
+              }
+            }
+            if (conjuncts_failed) continue;
+            row->SetTuple(scan_node_->tuple_idx(), tuple);
+            if (EvalConjuncts(row)) {
+              row = next_row(row);
+              tuple = next_tuple(tuple);
+              ++num_to_commit;
+            }
+          }
         }
       }
     } else {
@@ -1277,6 +1504,8 @@ bool IsEncodingSupported(parquet::Encoding::type e) {
     case parquet::Encoding::PLAIN_DICTIONARY:
     case parquet::Encoding::BIT_PACKED:
     case parquet::Encoding::RLE:
+    case parquet::Encoding::FLE:
+    case parquet::Encoding::FLE_DICTIONARY:
       return true;
     default:
       return false;
@@ -1455,4 +1684,12 @@ string HdfsParquetScanner::SchemaNode::DebugString(int indent) const {
     ss << "}";
   }
   return ss.str();
+}
+
+bool HdfsParquetScanner::CreateSimplePredicates() {
+  for (int i = 0; i < num_ctxs; ++i) {
+    SimplePredicates* root = ctxs[i]->CreateSimplePredicates(column_readers_);
+    if (!root) return false;
+    simple_predicates_.push_back(root);
+  }
 }

@@ -27,7 +27,7 @@ namespace impala {
 class CompoundPredicate: public Predicate {
  public:
   static BooleanVal Not(FunctionContext* context, const BooleanVal&);
-  
+
  protected:
   CompoundPredicate(const TExprNode& node) : Predicate(node) { }
 
@@ -42,6 +42,9 @@ class AndPredicate: public CompoundPredicate {
   virtual Status GetCodegendComputeFn(RuntimeState* state, llvm::Function** fn) {
     return CompoundPredicate::CodegenComputeFn(true, state, fn);
   }
+
+  virtual SimplePredicates* CreateSimplePredicates(
+      vector<BaseColumnReader*>& column_readers);
 
  protected:
   friend class Expr;
@@ -65,6 +68,9 @@ class OrPredicate: public CompoundPredicate {
   virtual Status GetCodegendComputeFn(RuntimeState* state, llvm::Function** fn) {
     return CompoundPredicate::CodegenComputeFn(false, state, fn);
   }
+
+  virtual SimplePredicates* CreateSimplePredicates(
+      vector<BaseColumnReader*>& column_readers);
 
  protected:
   friend class Expr;

@@ -29,6 +29,7 @@
 #include "util/debug-util.h"
 #include "util/dict-encoding.h"
 #include "util/hdfs-util.h"
+#include "util/fle-encoding.h"
 #include "util/rle-encoding.h"
 #include "rpc/thrift-util.h"
 
@@ -100,7 +101,7 @@ class HdfsParquetTableWriter::BaseColumnWriter {
     Codec::CreateCompressor(NULL, false, codec, &compressor_);
 
     def_levels_ = parent_->state_->obj_pool()->Add(
-        new RleEncoder(parent_->reusable_col_mem_pool_->Allocate(DEFAULT_DATA_PAGE_SIZE),
+        new FleEncoder(parent_->reusable_col_mem_pool_->Allocate(DEFAULT_DATA_PAGE_SIZE),
                        DEFAULT_DATA_PAGE_SIZE, 1));
     values_buffer_ = parent_->reusable_col_mem_pool_->Allocate(values_buffer_len_);
   }
@@ -225,7 +226,7 @@ class HdfsParquetTableWriter::BaseColumnWriter {
   // this always uses 1 bit per row.
   // This is reused across pages since the underlying buffer is copied out when
   // the page is finalized.
-  RleEncoder* def_levels_;
+  FleEncoder* def_levels_;
 
   // Data for buffered values. This is reused across pages.
   uint8_t* values_buffer_;
@@ -249,7 +250,7 @@ class HdfsParquetTableWriter::ColumnWriter :
     BaseColumnWriter::Reset();
     // Default to dictionary encoding.  If the cardinality ends up being too high,
     // it will fall back to plain.
-    current_encoding_ = Encoding::PLAIN_DICTIONARY;
+    current_encoding_ = Encoding::FLE_DICTIONARY;
     dict_encoder_.reset(
         new DictEncoder<T>(parent_->per_file_mem_pool_.get(), encoded_value_size_));
     dict_encoder_base_ = dict_encoder_.get();
@@ -257,7 +258,7 @@ class HdfsParquetTableWriter::ColumnWriter :
 
  protected:
   virtual bool EncodeValue(void* value, int64_t* bytes_needed) {
-    if (current_encoding_ == Encoding::PLAIN_DICTIONARY) {
+    if (current_encoding_ == Encoding::PLAIN_DICTIONARY || current_encoding_ == Encoding::FLE_DICTIONARY) {
       if (UNLIKELY(num_values_since_dict_size_check_ >=
                    DICTIONARY_DATA_PAGE_SIZE_CHECK_PERIOD)) {
         num_values_since_dict_size_check_ = 0;
@@ -447,7 +448,7 @@ Status HdfsParquetTableWriter::BaseColumnWriter::Flush(int64_t* file_pos,
     // Write dictionary page header
     DictionaryPageHeader dict_header;
     dict_header.num_values = dict_encoder_base_->num_entries();
-    dict_header.encoding = Encoding::PLAIN_DICTIONARY;
+    dict_header.encoding = Encoding::FLE_DICTIONARY;
 
     PageHeader header;
     header.type = PageType::DICTIONARY_PAGE;
@@ -528,7 +529,7 @@ void HdfsParquetTableWriter::BaseColumnWriter::FinalizeCurrentPage() {
   // around a parquet MR bug (see IMPALA-759 for more details).
   if (current_page_->num_non_null == 0) current_encoding_ = Encoding::PLAIN;
 
-  if (current_encoding_ == Encoding::PLAIN_DICTIONARY) WriteDictDataPage();
+  if (current_encoding_ == Encoding::PLAIN_DICTIONARY || current_encoding_ == Encoding::FLE_DICTIONARY) WriteDictDataPage();
 
   PageHeader& header = current_page_->header;
   header.data_page_header.encoding = current_encoding_;
@@ -607,7 +608,7 @@ void HdfsParquetTableWriter::BaseColumnWriter::NewPage() {
 
     DataPageHeader header;
     header.num_values = 0;
-    header.definition_level_encoding = Encoding::RLE;
+    header.definition_level_encoding = Encoding::FLE;
     header.repetition_level_encoding = Encoding::BIT_PACKED;
     current_page_->header.__set_data_page_header(header);
   }
@@ -776,10 +777,10 @@ Status HdfsParquetTableWriter::AddRowGroup() {
     metadata.type = IMPALA_TO_PARQUET_TYPES[columns_[i]->expr_ctx_->root()->type().type];
     // Add all encodings that were used in this file.  Currently we use PLAIN and
     // PLAIN_DICTIONARY for data values and RLE for the definition levels.
-    metadata.encodings.push_back(Encoding::RLE);
+    metadata.encodings.push_back(Encoding::FLE);
     // Columns are initially dictionary encoded
     // TODO: we might not have PLAIN encoding in this case
-    metadata.encodings.push_back(Encoding::PLAIN_DICTIONARY);
+    metadata.encodings.push_back(Encoding::FLE_DICTIONARY);
     metadata.encodings.push_back(Encoding::PLAIN);
     metadata.path_in_schema.push_back(table_desc_->col_names()[i + num_clustering_cols]);
     metadata.codec = columns_[i]->codec();

@@ -18,6 +18,7 @@
 
 #include "exec/hdfs-scanner.h"
 #include "exec/parquet-common.h"
+#include "exprs/simple-predicates.h"
 
 namespace impala {
 
@@ -148,6 +149,8 @@ class HdfsParquetScanner : public HdfsScanner {
 
   // Number of cols that need to be read.
   RuntimeProfile::Counter* num_cols_counter_;
+
+  boost::ptr_vector<SimplePredicates> simple_predicates_;
 
   // Reads data from all the columns (in parallel) and assembles rows into the context
   // object. Returns when the entire row group is complete or an error occurred.

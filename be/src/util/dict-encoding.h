@@ -24,8 +24,9 @@
 #include "exec/parquet-common.h"
 #include "runtime/mem-pool.h"
 #include "runtime/string-value.h"
-#include "util/rle-encoding.h"
+#include "util/bit-util.h"
 #include "util/fle-encoding.h"
+#include "util/rle-encoding.h"
 #include "util/runtime-profile.h"
 
 using namespace impala_udf;
@@ -177,7 +178,7 @@ class DictDecoderBase {
     DCHECK_GE(bit_width, 0);
     ++buffer;
     --buffer_len;
-    data_decoder_.reset(new FleDecoder(buffer, buffer_len, bit_width, num_values));
+    data_decoder_.reset(FleDecoder::NewFleDecoder(buffer, buffer_len, bit_width, num_values));
   }
 
   virtual ~DictDecoderBase() {}
@@ -205,6 +206,21 @@ class DictDecoder : public DictDecoderBase {
   // For StringValues, this does not make a copy of the data.  Instead,
   // the string data is from the dictionary buffer passed into the c'tor.
   bool GetValue(T* value);
+
+  template<typename T>
+  inline void Eq(int64_t num_rows, vector<uint64_t>& skip_bit_vec, T& val);
+
+  template<typename T>
+  inline void Gt(int64_t num_rows, vector<uint64_t>& skip_bit_vec, T& val);
+
+  template<typename T>
+  inline void Lt(int64_t num_rows, vector<uint64_t>& skip_bit_vec, T& val);
+
+  template<typename T>
+  inline void Ge(int64_t num_rows, vector<uint64_t>& skip_bit_vec, T& val);
+
+  template<typename T>
+  inline void Le(int64_t num_rows, vector<uint64_t>& skip_bit_vec, T& val);
 
  private:
   std::vector<T> dict_;
@@ -356,6 +372,69 @@ inline DictDecoder<T>::DictDecoder(uint8_t* dict_buffer, int dict_len,
     dict_buffer +=
         ParquetPlainEncoder::Decode(dict_buffer, fixed_len_size, &value);
     dict_.push_back(value);
+  }
+}
+
+template<typename T>
+inline void DictDecoder<T>::Eq(int64_t num_rows, vector<uint64_t>& skip_bit_vec,
+    T& val) {
+  vector<T>::iterator it = std::lower_bound(dict_.begin(), dict_.end(), val);
+  if (it == dict_.end()) {
+    skip_bit_vec.resize(BitUtil::Ceil(num_rows, 64), (uint64_t)0);
+  } else {
+    data_decoder_->Eq(it - dict_.begin(), num_rows, skip_bit_vec);
+  }
+}
+
+template<typename T>
+inline void DictDecoder<T>::Gt(int64_t num_rows, vector<uint64_t>& skip_bit_vec,
+    T& val) {
+  if (dict_.back() <= val) {
+    skip_bit_vec.resize(BitUtil::Ceil(num_rows, 64), (uint64_t)0);
+  } else if (dict_.begin() > val) {
+    skip_bit_vec.resize(BitUtil::Ceil(num_rows, 64), ~(uint64_t)0);
+  } else {
+    vector<T>::iterator it = std::lower_bound(dict_.begin(), dict_.end(), val);
+    data_decoder_->Gt(it - dict_.begin(), num_rows, skip_bit_vec);
+  }
+}
+
+template<typename T>
+inline void DictDecoder<T>::Lt(int64_t num_rows, vector<uint64_t>& skip_bit_vec,
+    T& val) {
+  if (dict_.begin() >= val) {
+    skip_bit_vec.resize(BitUtil::Ceil(num_rows, 64), (uint64_t)0);
+  } else if (dict_.back() < val) {
+    skip_bit_vec.resize(BitUtil::Ceil(num_rows, 64), ~(uint64_t)0);
+  } else {
+    vector<T>::iterator it = std::lower_bound(dict_.begin(), dict_.end(), val);
+    data_decoder_->Lt(it - dict_.begin(), num_rows, skip_bit_vec);
+  }
+}
+
+template<typename T>
+inline void DictDecoder<T>::Ge(int64_t num_rows, vector<uint64_t>& skip_bit_vec,
+    T& val) {
+  if (dict_.back() < val) {
+    skip_bit_vec.resize(BitUtil::Ceil(num_rows, 64), (uint64_t)0);
+  } else if (dict_.begin() >= val) {
+    skip_bit_vec.resize(BitUtil::Ceil(num_rows, 64), ~(uint64_t)0);
+  } else {
+    vector<T>::iterator it = std::lower_bound(dict_.begin(), dict_.end(), val);
+    data_decoder_->Ge(it - dict_.begin(), num_rows, skip_bit_vec);
+  }
+}
+
+template<typename T>
+inline void DictDecoder<T>::Le(int64_t num_rows, vector<uint64_t>& skip_bit_vec,
+    T& val) {
+  if (dict_.begin() > val) {
+    skip_bit_vec.resize(BitUtil::Ceil(num_rows, 64), (uint64_t)0);
+  } else if (dict_.back() <= val) {
+    skip_bit_vec.resize(BitUtil::Ceil(num_rows, 64), ~(uint64_t)0);
+  } else {
+    vector<T>::iterator it = std::lower_bound(dict_.begin(), dict_.end(), val);
+    data_decoder_->Le(it - dict_.begin(), num_rows, skip_bit_vec);
   }
 }
 

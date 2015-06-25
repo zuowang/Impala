@@ -729,6 +729,100 @@ DecimalVal ScalarFnCall::GetDecimalVal(ExprContext* context, TupleRow* row) {
   return fn(context, row);
 }
 
+SimplePredicates* ScalarFnCall::CreateSimplePredicates(
+    vector<BaseColumnReader*>& column_readers) {
+  DCHECK_EQ(type_.type, TYPE_BOOLEAN);
+  if (children_.size() != 2) return NULL;
+  if (!children_[0]->is_slotref()) return NULL;
+  if (fn_.name.function_name != "eq" || fn_.name.function_name != "gt" ||
+      fn_.name.function_name != "lt" || fn_.name.function_name != "ge" ||
+      fn_.name.function_name != "le") {
+    return NULL;
+  }
+
+  switch (children_[1]->type()) {
+    case TYPE_BOOLEAN: {
+      BooleanVal v = static_cast<Literal*>(children_[1])->GetBooleanVal(NULL, NULL);
+      return CreateOperate(column_readers, v);
+      break;
+    }
+    case TYPE_TINYINT: {
+      TinyIntVal v = static_cast<Literal*>(children_[1])->GetTinyIntVal(NULL, NULL);
+      return CreateOperate(column_readers, v);
+      break;
+    }
+    case TYPE_SMALLINT: {
+      SmallIntVal v = static_cast<Literal*>(children_[1])->GetSmallIntVal(NULL, NULL);
+      return CreateOperate(column_readers, v);
+      break;
+    }
+    case TYPE_INT: {
+      IntVal v = static_cast<Literal*>(children_[1])->GetIntVal(NULL, NULL);
+      return CreateOperate(column_readers, v);
+      break;
+    }
+    case TYPE_BIGINT: {
+      BigIntVal v = static_cast<Literal*>(children_[1])->GetBigIntVal(NULL, NULL);
+      return CreateOperate(column_readers, v);
+      break;
+    }
+    case TYPE_FLOAT: {
+      FloatVal v = static_cast<Literal*>(children_[1])->GetFloatVal(NULL, NULL);
+      return CreateOperate(column_readers, v);
+      break;
+    }
+    case TYPE_DOUBLE: {
+      DoubleVal v = static_cast<Literal*>(children_[1])->GetDoubleVal(NULL, NULL);
+      return CreateOperate(column_readers, v);
+      break;
+    }
+    case TYPE_STRING:
+    case TYPE_VARCHAR:
+    case TYPE_CHAR: {
+      StringVal v = static_cast<Literal*>(children_[1])->GetStringVal(NULL, NULL);
+      return CreateOperate(column_readers, v);
+      break;
+    }
+    case TYPE_TIMESTAMP: {
+      TimestampVal v = static_cast<Literal*>(children_[1])->GetTimestampVal(NULL, NULL);
+      return CreateOperate(column_readers, v);
+      break;
+    }
+    case TYPE_DECIMAL: {
+      DecimalVal v = static_cast<Literal*>(children_[1])->GetDecimalVal(NULL, NULL);
+      return CreateOperate(column_readers, v);
+      break;
+      }
+    }
+    default:
+      DCHECK(false) << "Type not implemented: " << children_[1]->type().DebugString();
+      return NULL;
+  }
+}
+
+template<typename T>
+SimplePredicates* ScalarFnCall::CreateOperate(
+    vector<BaseColumnReader*>& column_readers, T val) {
+  FunctionContext* fn_ctx = context->fn_context(context_index_);
+  RuntimeState* state = fn_ctx->impl()->state();
+  SlotId slot_id = static_cast<SlotRef*>(children_[0])->slot_id();
+  const SlotDescriptor* slot_desc = state->->desc_tbl().GetSlotDescriptor(slot_id);
+
+  if (fn_.name.function_name == "eq") {
+    return EqOperate(column_readers[slot_desc->slot_idx()], val);
+  } else if (fn_.name.function_name == "gt") {
+    return GtOperate(column_readers[slot_desc->slot_idx()], val);
+  } else if (fn_.name.function_name == "lt") {
+    return LtOperate(column_readers[slot_desc->slot_idx()], val);
+  } else if (fn_.name.function_name == "ge") {
+    return GeOperate(column_readers[slot_desc->slot_idx()], val);
+  } else if (fn_.name.function_name == "le") {
+    return LeOperate(column_readers[slot_desc->slot_idx()], val);
+  } else {
+    return NULL;
+  }
+}
+
 string ScalarFnCall::DebugString() const {
   stringstream out;
   out << "ScalarFnCall(udf_type=" << fn_.binary_type
