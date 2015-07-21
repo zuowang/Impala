@@ -45,7 +45,7 @@ class AndPredicate: public CompoundPredicate {
     return CompoundPredicate::CodegenComputeFn(true, state, fn);
   }
 
-  virtual SimplePredicate* CreateSimplePredicates(RuntimeState* state);
+  virtual SimplePredicate* CreateSimplePredicates(HdfsScanNode* scan_node);
 
  protected:
   friend class Expr;
@@ -70,7 +70,7 @@ class OrPredicate: public CompoundPredicate {
     return CompoundPredicate::CodegenComputeFn(false, state, fn);
   }
 
-  virtual SimplePredicate* CreateSimplePredicates(RuntimeState* state);
+  virtual SimplePredicate* CreateSimplePredicates(HdfsScanNode* scan_node);
 
  protected:
   friend class Expr;

@@ -136,6 +136,13 @@ class HdfsParquetScanner : public HdfsScanner {
   class BoolColumnReader;
   friend class BoolColumnReader;
 
+  template<typename T> class EqOperate;
+  template<typename T> class LtOperate;
+  template<typename T> class LeOperate;
+  template<typename T> class GtOperate;
+  template<typename T> class GeOperate;
+
+
   // Column reader for each materialized columns for this file.
   std::vector<BaseColumnReader*> column_readers_;
 

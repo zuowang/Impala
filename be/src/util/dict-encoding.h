@@ -217,9 +217,9 @@ class DictDecoder : public DictDecoderBase {
   // the string data is from the dictionary buffer passed into the c'tor.
   bool GetValue(T* value);
 
-  bool GetValue(T* value, int skip_distance);
+  bool GetValue(T* value, int skip_rows);
 
-  bool SkipValue(int skip_distance);
+  bool SkipValue(int skip_rows);
 
   inline void Eq(int64_t num_rows, dynamic_bitset<>& skip_bitset, T& val);
   inline void Gt(int64_t num_rows, dynamic_bitset<>& skip_bitset, T& val);
@@ -318,10 +318,10 @@ inline bool DictDecoder<T>::GetValue(T* value) {
 }
 
 template<typename T>
-inline bool DictDecoder<T>::GetValue(T* value, int skip_distance) {
+inline bool DictDecoder<T>::GetValue(T* value, int skip_rows) {
   DCHECK(data_decoder_.get() != NULL);
   int index;
-  bool result = data_decoder_->Get(&index, skip_distance);
+  bool result = data_decoder_->Get(&index, skip_rows);
   if (!result) return false;
   if (index >= dict_.size()) return false;
   *value = dict_[index];
@@ -329,9 +329,9 @@ inline bool DictDecoder<T>::GetValue(T* value, int skip_distance) {
 }
 
 template<typename T>
-inline bool DictDecoder<T>::SkipValue(int skip_distance) {
+inline bool DictDecoder<T>::SkipValue(int skip_rows) {
   DCHECK(data_decoder_.get() != NULL);
-  return data_decoder_->Skip(skip_distance);
+  return data_decoder_->Skip(skip_rows);
 }
 
 template<>
@@ -351,10 +351,10 @@ inline bool DictDecoder<Decimal16Value>::GetValue(Decimal16Value* value) {
 
 template<>
 inline bool DictDecoder<Decimal16Value>::GetValue(Decimal16Value* value,
-    int skip_distance) {
+    int skip_rows) {
   DCHECK(data_decoder_.get() != NULL);
   int index;
-  bool result = data_decoder_->Get(&index, skip_distance);
+  bool result = data_decoder_->Get(&index, skip_rows);
   if (!result) return false;
   if (index >= dict_.size()) return false;
   // Workaround for IMPALA-959. Use memcpy instead of '=' so addresses

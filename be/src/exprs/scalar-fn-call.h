@@ -29,7 +29,6 @@ using namespace impala_udf;
 namespace impala {
 
 class Literal;
-class SimplePredicate;
 class TExprNode;
 
 // Expr for evaluating a pre-compiled native or LLVM IR function that uses the UDF
@@ -79,7 +78,7 @@ class ScalarFnCall: public Expr {
   virtual TimestampVal GetTimestampVal(ExprContext* context, TupleRow*);
   virtual DecimalVal GetDecimalVal(ExprContext* context, TupleRow*);
 
-  virtual SimplePredicate* CreateSimplePredicates(RuntimeState* state);
+  virtual SimplePredicate* CreateSimplePredicates(HdfsScanNode* scan_node);
 
  private:
   // If this function has var args, children()[vararg_start_idx_] is the first vararg
@@ -129,7 +128,7 @@ class ScalarFnCall: public Expr {
   RETURN_TYPE InterpretEval(ExprContext* context, TupleRow* row);
 
   template<typename T>
-  SimplePredicate* CreateOperate(RuntimeState* state, T val);
+  SimplePredicate* CreateOperate(HdfsScanNode* scan_node, T val);
 };
 
 }

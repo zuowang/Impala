@@ -33,13 +33,13 @@ BooleanVal AndPredicate::GetBooleanVal(ExprContext* context, TupleRow* row) {
   return BooleanVal(true);
 }
 
-SimplePredicate* AndPredicate::CreateSimplePredicates(RuntimeState* state) {
+SimplePredicate* AndPredicate::CreateSimplePredicates(HdfsScanNode* scan_node) {
   DCHECK_EQ(children_.size(), 2);
-  SimplePredicate* child0 = children_[0]->CreateSimplePredicates(state);
+  SimplePredicate* child0 = children_[0]->CreateSimplePredicates(scan_node);
   if (!child0) return NULL;
-  SimplePredicate* child1 = children_[1]->CreateSimplePredicates(state);
+  SimplePredicate* child1 = children_[1]->CreateSimplePredicates(scan_node);
   if (!child1) return NULL;
-  SimplePredicate* root = state->obj_pool()->Add(new AndOperate(child0, child1));
+  SimplePredicate* root = scan_node->runtime_state()->obj_pool()->Add(new AndOperate(child0, child1));
   return root;
 }
 
@@ -56,13 +56,13 @@ BooleanVal OrPredicate::GetBooleanVal(ExprContext* context, TupleRow* row) {
   return BooleanVal(false);
 }
 
-SimplePredicate* OrPredicate::CreateSimplePredicates(RuntimeState* state) {
+SimplePredicate* OrPredicate::CreateSimplePredicates(HdfsScanNode* scan_node) {
   DCHECK_EQ(children_.size(), 2);
-  SimplePredicate* child0 = children_[0]->CreateSimplePredicates(state);
+  SimplePredicate* child0 = children_[0]->CreateSimplePredicates(scan_node);
   if (!child0) return NULL;
-  SimplePredicate* child1 = children_[1]->CreateSimplePredicates(state);
+  SimplePredicate* child1 = children_[1]->CreateSimplePredicates(scan_node);
   if (!child1) return NULL;
-  SimplePredicate* root = state->obj_pool()->Add(new OrOperate(child0, child1));
+  SimplePredicate* root = scan_node->runtime_state()->obj_pool()->Add(new OrOperate(child0, child1));
   return root;
 }
 

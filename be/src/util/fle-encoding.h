@@ -171,9 +171,9 @@ class FleDecoder {
   bool Get(T* val);
 
   template<typename T>
-  bool Get(T* val, int skip_distance);
+  bool Get(T* val, int skip_rows);
 
-  bool Skip(int skip_distance);
+  bool Skip(int skip_rows);
 
   void Unpack_1();
   void Unpack_2();
@@ -342,21 +342,21 @@ class FleEncoder {
 };
 
 template<typename T>
-inline bool FleDecoder::Get(T* val, int skip_distance) {
+inline bool FleDecoder::Get(T* val, int skip_rows) {
   if (UNLIKELY(count_ == num_vals_ + 64)) return false;
   if (UNLIKELY(count_ == 64)) {
-    count_ = skip_distance & (64 - 1);
-    int skip_64 = (skip_distance & ~(64 - 1)) >> 6;
+    count_ = skip_rows & (64 - 1);
+    int skip_64 = (skip_rows & ~(64 - 1)) >> 6;
     buffer_end_ += bit_width_ * skip_64;
     num_vals_ -= 64 * skip_64;
     unpack_function_();
     buffer_end_ += bit_width_;
     num_vals_ -= 64;
   } else {
-    skip_distance += count_;
-    count_ = skip_distance & (64 - 1);
-    if (skip_distance >= 64) {
-      int skip_64 = ((skip_distance & ~(64 - 1)) >> 6) - 1;
+    skip_rows += count_;
+    count_ = skip_rows & (64 - 1);
+    if (skip_rows >= 64) {
+      int skip_64 = ((skip_rows & ~(64 - 1)) >> 6) - 1;
       buffer_end_ += bit_width_ * skip_64;
       num_vals_ -= 64 * skip_64;
       unpack_function_();
@@ -381,21 +381,21 @@ inline bool FleDecoder::Get(T* val, int skip_distance) {
   return true;
 }
 
-inline bool FleDecoder::Skip(int skip_distance) {
+inline bool FleDecoder::Skip(int skip_rows) {
   if (UNLIKELY(count_ == num_vals_ + 64)) return false;
   if (UNLIKELY(count_ == 64)) {
-    count_ = skip_distance & (64 - 1);
-    int skip_64 = (skip_distance & ~(64 - 1)) >> 6;
+    count_ = skip_rows & (64 - 1);
+    int skip_64 = (skip_rows & ~(64 - 1)) >> 6;
     buffer_end_ += bit_width_ * skip_64;
     num_vals_ -= 64 * skip_64;
     unpack_function_();
     buffer_end_ += bit_width_;
     num_vals_ -= 64;
   } else {
-    skip_distance += count_;
-    count_ = skip_distance & (64 - 1);
-    if (skip_distance >= 64) {
-      int skip_64 = ((skip_distance & ~(64 - 1)) >> 6) - 1;
+    skip_rows += count_;
+    count_ = skip_rows & (64 - 1);
+    if (skip_rows >= 64) {
+      int skip_64 = ((skip_rows & ~(64 - 1)) >> 6) - 1;
       buffer_end_ += bit_width_ * skip_64;
       num_vals_ -= 64 * skip_64;
       unpack_function_();
@@ -7986,6 +7986,7 @@ inline void FleDecoder::Eq(int64_t num_rows, dynamic_bitset<>& skip_bitset,
       skip_bitset.push_back(current_value_[i] == value);
     }
   }
+
 //  if (count_ != 64) {
 //    uint64_t Meq = ~0x0;
 //    int i = bit_width_ - 1;
@@ -8012,10 +8013,21 @@ inline void FleDecoder::Eq(int64_t num_rows, dynamic_bitset<>& skip_bitset,
     for (int i = 0; i < bit_width_; ++i, ++j) {
       Meq = Meq & ~(buffer_end_[j] ^ C[i]);
     }
+    Meq = ((Meq >> 1) & 0x5555555555555555) | ((Meq & 0x5555555555555555) << 1);
+    // swap consecutiMeqe pairs
+    Meq = ((Meq >> 2) & 0x3333333333333333) | ((Meq & 0x3333333333333333) << 2);
+    // swap nibbles ...
+    Meq = ((Meq >> 4) & 0x0F0F0F0F0F0F0F0F) | ((Meq & 0x0F0F0F0F0F0F0F0F) << 4);
+    // swap bytes
+    Meq = ((Meq >> 8) & 0x00FF00FF00FF00FF) | ((Meq & 0x00FF00FF00FF00FF) << 8);
+    // swap 2-byte long pairs
+    Meq = ((Meq >> 16) & 0x0000FFFF0000FFFF) | ((Meq & 0x0000FFFF0000FFFF) << 16);
+    Meq = ( Meq >> 32                      ) | ( Meq                       << 32);
+
     if (num_rows < 64) {
       std::bitset<64> tmp_bitset(Meq);
       for (int i = 0; i < num_rows; ++i) {
-        skip_bitset.push_back(tmp_bitset[63 - i]);
+        skip_bitset.push_back(tmp_bitset[i]);
       }
       break;
     }

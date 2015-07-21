@@ -103,6 +103,7 @@ namespace llvm {
 namespace impala {
 
 class Expr;
+class HdfsScanNode;
 class IsNullExpr;
 class LlvmCodeGen;
 class ObjectPool;
@@ -230,7 +231,7 @@ class Expr {
   // not strip these symbols.
   static void InitBuiltinsDummy();
 
-  virtual SimplePredicate* CreateSimplePredicates(RuntimeState* state) {
+  virtual SimplePredicate* CreateSimplePredicates(HdfsScanNode* scan_node) {
     return NULL;
   }
 

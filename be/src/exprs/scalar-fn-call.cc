@@ -729,7 +729,7 @@ DecimalVal ScalarFnCall::GetDecimalVal(ExprContext* context, TupleRow* row) {
   return fn(context, row);
 }
 
-SimplePredicate* ScalarFnCall::CreateSimplePredicates(RuntimeState* state) {
+SimplePredicate* ScalarFnCall::CreateSimplePredicates(HdfsScanNode* scan_node) {
   DCHECK_EQ(type_.type, TYPE_BOOLEAN);
   if (children_.size() != 2) return NULL;
   if (!children_[0]->is_slotref()) return NULL;
@@ -741,57 +741,57 @@ SimplePredicate* ScalarFnCall::CreateSimplePredicates(RuntimeState* state) {
     }
     case TYPE_TINYINT: {
       TinyIntVal v = static_cast<Literal*>(children_[1])->GetTinyIntVal(NULL, NULL);
-      return CreateOperate(state, v.val);
+      return CreateOperate(scan_node, v.val);
       break;
     }
     case TYPE_SMALLINT: {
       SmallIntVal v = static_cast<Literal*>(children_[1])->GetSmallIntVal(NULL, NULL);
-      return CreateOperate(state, v.val);
+      return CreateOperate(scan_node, v.val);
       break;
     }
     case TYPE_INT: {
       IntVal v = static_cast<Literal*>(children_[1])->GetIntVal(NULL, NULL);
-      return CreateOperate(state, v.val);
+      return CreateOperate(scan_node, v.val);
       break;
     }
     case TYPE_BIGINT: {
       BigIntVal v = static_cast<Literal*>(children_[1])->GetBigIntVal(NULL, NULL);
-      return CreateOperate(state, v.val);
+      return CreateOperate(scan_node, v.val);
       break;
     }
     case TYPE_FLOAT: {
       FloatVal v = static_cast<Literal*>(children_[1])->GetFloatVal(NULL, NULL);
-      return CreateOperate(state, v.val);
+      return CreateOperate(scan_node, v.val);
       break;
     }
     case TYPE_DOUBLE: {
       DoubleVal v = static_cast<Literal*>(children_[1])->GetDoubleVal(NULL, NULL);
-      return CreateOperate(state, v.val);
+      return CreateOperate(scan_node, v.val);
       break;
     }
     case TYPE_STRING:
     case TYPE_VARCHAR:
     case TYPE_CHAR: {
       StringVal v = static_cast<Literal*>(children_[1])->GetStringVal(NULL, NULL);
-      return CreateOperate(state, StringValue::FromStringVal(v));
+      return CreateOperate(scan_node, StringValue::FromStringVal(v));
       break;
     }
     case TYPE_TIMESTAMP: {
       TimestampVal v = static_cast<Literal*>(children_[1])->GetTimestampVal(NULL, NULL);
-      return CreateOperate(state, TimestampValue::FromTimestampVal(v));
+      return CreateOperate(scan_node, TimestampValue::FromTimestampVal(v));
       break;
     }
     case TYPE_DECIMAL: {
       DecimalVal v = static_cast<Literal*>(children_[1])->GetDecimalVal(NULL, NULL);
       switch (children_[1]->type().GetByteSize()) {
         case 4:
-          return CreateOperate(state, DecimalValue<int32_t>(v.val4));
+          return CreateOperate(scan_node, DecimalValue<int32_t>(v.val4));
           break;
         case 8:
-          return CreateOperate(state, DecimalValue<int64_t>(v.val8));
+          return CreateOperate(scan_node, DecimalValue<int64_t>(v.val8));
           break;
         case 16:
-          return CreateOperate(state, DecimalValue<int128_t>(v.val16));
+          return CreateOperate(scan_node, DecimalValue<int128_t>(v.val16));
           break;
         default:
           DCHECK(false) << type_.DebugString();
@@ -805,19 +805,22 @@ SimplePredicate* ScalarFnCall::CreateSimplePredicates(RuntimeState* state) {
 }
 
 template<typename T>
-inline SimplePredicate* ScalarFnCall::CreateOperate(RuntimeState* state, T val) {
+inline SimplePredicate* ScalarFnCall::CreateOperate(HdfsScanNode* scan_node, T val) {
   SlotId slot_id = static_cast<SlotRef*>(children_[0])->slot_id();
+  const SlotDescriptor* slot_desc = scan_node->runtime_state()->desc_tbl().GetSlotDescriptor(slot_id);
+  int slot_idx = scan_node->GetMaterializedSlotIdx(slot_desc->col_path());
+
   SimplePredicate* operate = NULL;
   if (fn_.name.function_name == "eq") {
-    operate = state->obj_pool()->Add(new EqOperate<T>(slot_id, val));
+    operate = scan_node->runtime_state()->obj_pool()->Add(new EqOperate<T>(slot_idx, val));
   } else if (fn_.name.function_name == "gt") {
-    operate = state->obj_pool()->Add(new GtOperate<T>(slot_id, val));
+    operate = scan_node->runtime_state()->obj_pool()->Add(new GtOperate<T>(slot_idx, val));
   } else if (fn_.name.function_name == "lt") {
-    operate = state->obj_pool()->Add(new LtOperate<T>(slot_id, val));
+    operate = scan_node->runtime_state()->obj_pool()->Add(new LtOperate<T>(slot_idx, val));
   } else if (fn_.name.function_name == "ge") {
-    operate = state->obj_pool()->Add(new GeOperate<T>(slot_id, val));
+    operate = scan_node->runtime_state()->obj_pool()->Add(new GeOperate<T>(slot_idx, val));
   } else if (fn_.name.function_name == "le") {
-    operate = state->obj_pool()->Add(new LeOperate<T>(slot_id, val));
+    operate = scan_node->runtime_state()->obj_pool()->Add(new LeOperate<T>(slot_idx, val));
   }
 
   return operate;

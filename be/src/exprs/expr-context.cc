@@ -337,7 +337,7 @@ DecimalVal ExprContext::GetDecimalVal(TupleRow* row) {
   return root_->GetDecimalVal(this, row);
 }
 
-SimplePredicate* ExprContext::CreateSimplePredicates(RuntimeState* state) {
-  return root_->CreateSimplePredicates(state);
+SimplePredicate* ExprContext::CreateSimplePredicates(HdfsScanNode* scan_node) {
+  return root_->CreateSimplePredicates(scan_node);
 }
 

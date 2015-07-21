@@ -27,6 +27,7 @@ using namespace impala_udf;
 namespace impala {
 
 class Expr;
+class HdfsScanNode;
 class MemPool;
 class MemTracker;
 class RuntimeState;
@@ -125,7 +126,7 @@ class ExprContext {
   static void FreeLocalAllocations(const std::vector<ExprContext*>& ctxs);
   static void FreeLocalAllocations(const std::vector<FunctionContext*>& ctxs);
 
-  SimplePredicate* CreateSimplePredicates(RuntimeState* state);
+  SimplePredicate* CreateSimplePredicates(HdfsScanNode* scan_node);
 
   static const char* LLVM_CLASS_NAME;
 

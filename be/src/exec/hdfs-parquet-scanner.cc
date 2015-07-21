@@ -195,7 +195,7 @@ class HdfsParquetScanner::BaseColumnReader {
 
   bool ReadValue(MemPool* pool, Tuple* tuple);
 
-  bool ReadValue(MemPool* pool, Tuple* tuple, int skip_distance);
+  bool ReadValue(MemPool* pool, Tuple* tuple, int skip_rows);
 
   // TODO: Some encodings might benefit a lot from a SkipValues(int num_rows) if
   // we know this row can be skipped. This could be very useful with stats and big
@@ -275,7 +275,7 @@ class HdfsParquetScanner::BaseColumnReader {
   // Returns -1 if there was a error parsing it.
   int ReadDefinitionLevel();
 
-  int ReadDefinitionLevel(int skip_distance);
+  int ReadDefinitionLevel(int skip_rows);
 
   // Creates a dictionary decoder from values/size. Subclass must implement this
   // and set dict_decoder_base_.
@@ -297,12 +297,12 @@ class HdfsParquetScanner::BaseColumnReader {
     return false;
   };
 
-  virtual bool ReadSlot(void* slot, MemPool* pool, int skip_distance) {
+  virtual bool ReadSlot(void* slot, MemPool* pool, int skip_rows) {
     DCHECK(false);
     return false;
   }
 
-  virtual bool SkipValue(int skip_distance) {
+  virtual bool SkipValue(int skip_rows) {
     DCHECK(false);
     return false;
   }
@@ -500,7 +500,7 @@ class HdfsParquetScanner::ColumnReader : public HdfsParquetScanner::BaseColumnRe
     return result;
   }
 
-  virtual bool ReadSlot(void* slot, MemPool* pool, int skip_distance)  {
+  virtual bool ReadSlot(void* slot, MemPool* pool, int skip_rows)  {
     parquet::Encoding::type page_encoding =
         current_page_header_.data_page_header.encoding;
     bool result = true;
@@ -508,27 +508,36 @@ class HdfsParquetScanner::ColumnReader : public HdfsParquetScanner::BaseColumnRe
     T* val_ptr = needs_conversion_ ? &val : reinterpret_cast<T*>(slot);
     if (page_encoding == parquet::Encoding::PLAIN_DICTIONARY ||
         page_encoding == parquet::Encoding::FLE_DICTIONARY) {
-      result = dict_decoder_->GetValue(val_ptr, skip_distance);
+      result = dict_decoder_->GetValue(val_ptr, skip_rows);
     } else {
       DCHECK(page_encoding == parquet::Encoding::PLAIN);
-      data_ += ParquetPlainEncoder::Decode<T>(data_, fixed_len_size_, val_ptr, skip_distance);
+      data_ += ParquetPlainEncoder::Decode<T>(data_, fixed_len_size_, val_ptr, skip_rows);
     }
     if (needs_conversion_) ConvertSlot(&val, reinterpret_cast<T*>(slot), pool);
     ++rows_returned_;
     return result;
   }
 
-  virtual bool SkipValue(int skip_distance)  {
+  virtual bool SkipValue(int skip_rows)  {
+    int tmp_skip_rows = 0;
+    for (int  i = 0; i < skip_rows; ++i) {
+      int definition_level = ReadDefinitionLevel();
+      if (definition_level < 0) return false;
+      if (definition_level != max_def_level()) continue;
+      ++tmp_skip_rows;
+    }
+
+    if (tmp_skip_rows <= 0) return true;
     parquet::Encoding::type page_encoding =
         current_page_header_.data_page_header.encoding;
     bool result = true;
     if (page_encoding == parquet::Encoding::PLAIN_DICTIONARY ||
         page_encoding == parquet::Encoding::FLE_DICTIONARY) {
-      result = dict_decoder_->SkipValue(skip_distance);
+      result = dict_decoder_->SkipValue(tmp_skip_rows);
     } else {
       DCHECK(page_encoding == parquet::Encoding::PLAIN);
       T* val_ptr = NULL;
-      data_ += ParquetPlainEncoder::Skip<T>(data_, fixed_len_size_, val_ptr, skip_distance);
+      data_ += ParquetPlainEncoder::Skip<T>(data_, fixed_len_size_, val_ptr, tmp_skip_rows);
     }
     return result;
   }
@@ -939,7 +948,7 @@ inline int HdfsParquetScanner::BaseColumnReader::ReadDefinitionLevel() {
   return definition_level;
 }
 
-inline int HdfsParquetScanner::BaseColumnReader::ReadDefinitionLevel(int skip_distance) {
+inline int HdfsParquetScanner::BaseColumnReader::ReadDefinitionLevel(int skip_rows) {
   if (max_def_level() == 0) {
     // This column and any containing structs are required so there is nothing encoded for
     // the definition levels.
@@ -957,7 +966,7 @@ inline int HdfsParquetScanner::BaseColumnReader::ReadDefinitionLevel(int skip_di
       break;
     }
     case parquet::Encoding::FLE:
-      valid = fle_def_levels_->Get(&definition_level, skip_distance);
+      valid = fle_def_levels_->Get(&definition_level, skip_rows);
       break;
     default:
       DCHECK(false);
@@ -1016,17 +1025,26 @@ inline bool HdfsParquetScanner::BaseColumnReader::ReadValue(MemPool* pool, Tuple
 }
 
 inline bool HdfsParquetScanner::BaseColumnReader::ReadValue(
-    MemPool* pool, Tuple* tuple, int skip_distance) {
-  int definition_level = ReadDefinitionLevel(skip_distance);
+    MemPool* pool, Tuple* tuple, int skip_rows) {
+  int tmp_skip_rows = 0;
+  for (int  i = 0; i < skip_rows; ++i) {
+    int definition_level = ReadDefinitionLevel();
+    if (definition_level < 0) return false;
+    if (definition_level != max_def_level()) continue;
+    ++tmp_skip_rows;
+  }
+
+  int definition_level = ReadDefinitionLevel();
   if (definition_level < 0) return false;
 
   if (definition_level != max_def_level()) {
     // Null value
     DCHECK_LT(definition_level, max_def_level());
     tuple->SetNull(slot_desc()->null_indicator_offset());
+    if (tmp_skip_rows > 0) SkipValue(tmp_skip_rows);
     return true;
   }
-  return ReadSlot(tuple->GetSlot(slot_desc()->tuple_offset()), pool, skip_distance);
+  return ReadSlot(tuple->GetSlot(slot_desc()->tuple_offset()), pool, tmp_skip_rows);
 }
 
 Status HdfsParquetScanner::ProcessSplit() {
@@ -1077,9 +1095,9 @@ Status HdfsParquetScanner::AssembleRows(int row_group_idx) {
   int num_column_readers = column_readers_.size();
   MemPool* pool;
   dynamic_bitset<> skip_bitset;
-  vector<int> skip_distance;
+  vector<int> skip_rows;
   int current_idx = 0;
-  int last_skip_distance = 0;
+  int last_skip_rows = 0;
 
   while (!reached_limit && !cancelled && rows_read < expected_rows_in_group) {
     Tuple* tuple;
@@ -1208,13 +1226,13 @@ Status HdfsParquetScanner::AssembleRows(int row_group_idx) {
         bool result = true;
 
         while (num_to_commit < row_mem_limit) {
-          if (current_idx == skip_distance.size()) {
-            if (last_skip_distance != 0) {
+          if (current_idx == skip_rows.size()) {
+            if (last_skip_rows != 0) {
               for (int c = 0; c < num_column_readers; ++c) {
-                result = column_readers_[c]->SkipValue(last_skip_distance);
+                result = column_readers_[c]->SkipValue(last_skip_rows);
               }
-              num_rows += last_skip_distance;
-              last_skip_distance = 0;
+              num_rows += last_skip_rows;
+              last_skip_rows = 0;
               if (!result) return parse_status_;
             }
             if (num_rows + rows_read >= expected_rows_in_group) {
@@ -1228,61 +1246,46 @@ Status HdfsParquetScanner::AssembleRows(int row_group_idx) {
               break;
             }
             if (skip_bitset.count() == 0) {
-              int tmp_skip_distance = skip_bitset.size();
+              int tmp_skip_rows = skip_bitset.size();
               for (int c = 0; c < num_column_readers; ++c) {
-                result = column_readers_[c]->SkipValue(tmp_skip_distance);
+                result = column_readers_[c]->SkipValue(tmp_skip_rows);
               }
               num_rows += skip_bitset.size();
               continue;
             }
 
-            skip_distance.clear();
+            skip_rows.clear();
             int start = 0;
-            int help = 63;
             int bitset_size = skip_bitset.size();
-            bool tail = false;
             int sum = 0;
-            if (bitset_size < 64) tail = true;
             for (int i = 0; i < bitset_size; ++i) {
-              if (tail) {
-                if (skip_bitset[i]) {
-                  skip_distance.push_back(i - start);
-                  sum += i - start + 1;
-                  start = i + 1;
-                }
-              } else {
-                if (skip_bitset[help - i]) {
-                  skip_distance.push_back(i - start);
-                  sum += i - start + 1;
-                  start = i + 1;
-                }
-                if ((i & 63) == 63) {
-                  help += 128;
-                  if (bitset_size - i  - 1 < 64) tail = true;
-                }
+              if (skip_bitset[i]) {
+                skip_rows.push_back(i - start);
+                sum += i - start + 1;
+                start = i + 1;
               }
             }
             sum += bitset_size - start;
             DCHECK(sum == bitset_size);
-            last_skip_distance = bitset_size - start;
+            last_skip_rows = bitset_size - start;
             current_idx = 0;
           }
 
           Tuple* firstTuple = tuple;
           int rest_rows = row_mem_limit - num_to_commit;
-          int distance_size = skip_distance.size();
+          int distance_size = skip_rows.size();
           int current_limited = std::min(distance_size, current_idx + rest_rows);
           for (int i = current_idx; i < current_limited; ++i) {
             InitTuple(template_tuple_, tuple);
-            result = column_readers_[0]->ReadValue(pool, tuple, skip_distance[i]);
-            num_rows += skip_distance[i] + 1;
+            result = column_readers_[0]->ReadValue(pool, tuple, skip_rows[i]);
+            num_rows += skip_rows[i] + 1;
             tuple = next_tuple(tuple);
           }
 
           for (int c = 1; c < num_column_readers; ++c) {
             tuple = firstTuple;
             for (int i = current_idx; i < current_limited; ++i) {
-              result = column_readers_[c]->ReadValue(pool, tuple, skip_distance[i]);
+              result = column_readers_[c]->ReadValue(pool, tuple, skip_rows[i]);
               tuple = next_tuple(tuple);
             }
           }
@@ -1300,75 +1303,6 @@ Status HdfsParquetScanner::AssembleRows(int row_group_idx) {
           current_idx = current_limited;
         }
 
-//        int rest_rows = num_rows;
-//        while (rest_rows > 0) {
-//          dynamic_bitset<> skip_bitset;
-//          if (!EvalSimplePredicates(skip_bitset)) return parse_status_;
-//
-//          vector<int> skip_distance;
-//          int start = 0;
-//          int help = 63;
-//          int bitset_size = skip_bitset.size();
-//          bool tail = false;
-//          int sum = 0;
-//          for (int i = 0; i < bitset_size; ++i) {
-//            if (tail) {
-//              if (skip_bitset[i]) {
-//                skip_distance.push_back(i - start);
-//                sum += i - start + 1;
-//                start = i + 1;
-//              }
-//            } else {
-//              if (skip_bitset[help - i]) {
-//                skip_distance.push_back(i - start);
-//                sum += i - start + 1;
-//                start = i + 1;
-//              }
-//              if ((i & 63) == 63) {
-//                help += 128;
-//                if (bitset_size - i  - 1 < 64) tail = true;
-//              }
-//            }
-//          }
-//          sum += bitset_size - start;
-//          DCHECK(sum == bitset_size);
-//
-//          Tuple* firstTuple = tuple;
-//          bool result = true;
-//          int skip_distance_size = skip_distance.size();
-//          for (int i = 0; i < skip_distance_size; ++i) {
-//            InitTuple(template_tuple_, tuple);
-//            result = column_readers_[0]->ReadValue(pool, tuple, skip_distance[i]);
-//            tuple = next_tuple(tuple);
-//          }
-//          if (start < bitset_size) {
-//            result = column_readers_[0]->SkipValue(bitset_size - start);
-//          }
-//
-//          for (int c = 1; c < num_column_readers; ++c) {
-//            tuple = firstTuple;
-//            for (int i = 0; i < skip_distance_size - 1; ++i) {
-//              result = column_readers_[c]->ReadValue(pool, tuple, skip_distance[i]);
-//              tuple = next_tuple(tuple);
-//            }
-//            if (start < bitset_size) {
-//              result = column_readers_[c]->SkipValue(bitset_size - start);
-//            }
-//          }
-//
-//          //TODO Handle error status.
-//          if (!result) return parse_status_;
-//
-//          tuple = firstTuple;
-//          for (int i = 0; i < skip_distance.size(); ++i) {
-//            row->SetTuple(scan_node_->tuple_idx(), tuple);
-//            row = next_row(row);
-//            tuple = next_tuple(tuple);
-//            ++num_to_commit;
-//          }
-//          rest_rows -= skip_bitset.size();
-//          if (rest_rows <= 0) break;
-//        }
       } else {
         for (int i = 0; i < num_rows; ++i) {
           bool conjuncts_failed = false;
@@ -2018,7 +1952,7 @@ void HdfsParquetScanner::CreateSimplePredicates() {
   }
   for (int i = 0; i < conjunct_ctxs_.size(); ++i) {
     SimplePredicate* root =
-        conjunct_ctxs_[i]->CreateSimplePredicates(scan_node_->runtime_state());
+        conjunct_ctxs_[i]->CreateSimplePredicates(scan_node_);
     if (!root) {
       simple_predicates_.clear();
       break;

@@ -154,7 +154,6 @@ inline void EqOperate<T>::GetBitset(HdfsParquetScanner* scanner, int64_t num_row
     boost::dynamic_bitset<>& skip_bitset) {
   DCHECK(scanner);
   scanner->Eq(idx_, num_rows, skip_bitset, val_);
-//  scanner->Eq();
 }
 
 template <typename T>
@@ -162,7 +161,6 @@ inline void LtOperate<T>::GetBitset(HdfsParquetScanner* scanner, int64_t num_row
     boost::dynamic_bitset<>& skip_bitset) {
   DCHECK(scanner);
   scanner->Lt(idx_, num_rows, skip_bitset, val_);
-//  scanner->Eq();
 }
 
 template <typename T>
@@ -170,7 +168,6 @@ inline void LeOperate<T>::GetBitset(HdfsParquetScanner* scanner, int64_t num_row
     boost::dynamic_bitset<>& skip_bitset) {
   DCHECK(scanner);
   scanner->Le(idx_, num_rows, skip_bitset, val_);
-//  scanner->Eq();
 }
 
 template <typename T>
@@ -178,7 +175,6 @@ inline void GtOperate<T>::GetBitset(HdfsParquetScanner* scanner, int64_t num_row
     boost::dynamic_bitset<>& skip_bitset) {
   DCHECK(scanner);
   scanner->Gt(idx_, num_rows, skip_bitset, val_);
-//  scanner->Eq();
 }
 
 template <typename T>
@@ -186,7 +182,6 @@ inline void GeOperate<T>::GetBitset(HdfsParquetScanner* scanner, int64_t num_row
     boost::dynamic_bitset<>& skip_bitset) {
   DCHECK(scanner);
   scanner->Ge(idx_, num_rows, skip_bitset, val_);
-//  scanner->Eq();
 }
 
 }
