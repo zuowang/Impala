@@ -22,6 +22,7 @@
 #include "codegen/codegen-anyval.h"
 #include "codegen/llvm-codegen.h"
 #include "exprs/anyval-util.h"
+#include "exprs/decimal-operators.cc"
 #include "exprs/expr-context.h"
 #include "runtime/hdfs-fs-cache.h"
 #include "runtime/lib-cache.h"
@@ -732,7 +733,13 @@ DecimalVal ScalarFnCall::GetDecimalVal(ExprContext* context, TupleRow* row) {
 SimplePredicate* ScalarFnCall::CreateSimplePredicates(HdfsScanNode* scan_node) {
   DCHECK_EQ(type_.type, TYPE_BOOLEAN);
   if (children_.size() != 2) return NULL;
-  if (!children_[0]->is_slotref()) return NULL;
+  SlotRef* slotref = NULL;
+  if (children_[0]->children_.size() == 1 && children_[0]->children_[0]->is_slotref()) {
+    slotref = static_cast<SlotRef*>(children_[0]->children_[0]);
+  }
+  if (children_[0]->is_slotref()) slotref = static_cast<SlotRef*>(children_[0]);
+  if (!slotref) return NULL;
+  if (children_[1]->is_slotref()) return NULL;
 
   switch (children_[1]->type().type) {
     case TYPE_BOOLEAN: {
@@ -741,57 +748,101 @@ SimplePredicate* ScalarFnCall::CreateSimplePredicates(HdfsScanNode* scan_node) {
     }
     case TYPE_TINYINT: {
       TinyIntVal v = static_cast<Literal*>(children_[1])->GetTinyIntVal(NULL, NULL);
-      return CreateOperate(scan_node, v.val);
+      return CreateOperate(scan_node, slotref, v.val);
       break;
     }
     case TYPE_SMALLINT: {
       SmallIntVal v = static_cast<Literal*>(children_[1])->GetSmallIntVal(NULL, NULL);
-      return CreateOperate(scan_node, v.val);
+      return CreateOperate(scan_node, slotref, v.val);
       break;
     }
     case TYPE_INT: {
       IntVal v = static_cast<Literal*>(children_[1])->GetIntVal(NULL, NULL);
-      return CreateOperate(scan_node, v.val);
+      return CreateOperate(scan_node, slotref, v.val);
       break;
     }
     case TYPE_BIGINT: {
       BigIntVal v = static_cast<Literal*>(children_[1])->GetBigIntVal(NULL, NULL);
-      return CreateOperate(scan_node, v.val);
+      return CreateOperate(scan_node, slotref, v.val);
       break;
     }
     case TYPE_FLOAT: {
       FloatVal v = static_cast<Literal*>(children_[1])->GetFloatVal(NULL, NULL);
-      return CreateOperate(scan_node, v.val);
+      if (slotref->type().type == TYPE_DECIMAL) {
+        bool overflow = false;
+        switch (slotref->type().GetByteSize()) {
+          case 4: {
+            Decimal4Value dv = Decimal4Value::FromDouble(slotref->type(), v.val, &overflow);
+            return CreateOperate(scan_node, slotref, dv);
+          }
+          case 8: {
+            Decimal8Value dv = Decimal8Value::FromDouble(slotref->type(), v.val, &overflow);
+            return CreateOperate(scan_node, slotref, dv);
+          }
+          case 16: {
+            Decimal16Value dv = Decimal16Value::FromDouble(slotref->type(), v.val, &overflow);
+            return CreateOperate(scan_node, slotref, dv);
+          }
+          default:
+            DCHECK(false);
+            return NULL;
+        }
+      }
+      return CreateOperate(scan_node, slotref, v.val);
       break;
     }
     case TYPE_DOUBLE: {
       DoubleVal v = static_cast<Literal*>(children_[1])->GetDoubleVal(NULL, NULL);
-      return CreateOperate(scan_node, v.val);
+      if (slotref->type().type == TYPE_DECIMAL) {
+        bool overflow = false;
+        switch (slotref->type().GetByteSize()) {
+          case 4: {
+            Decimal4Value dv = Decimal4Value::FromDouble(slotref->type(), v.val, &overflow);
+            return CreateOperate(scan_node, slotref, dv);
+          }
+          case 8: {
+            Decimal8Value dv = Decimal8Value::FromDouble(slotref->type(), v.val, &overflow);
+            return CreateOperate(scan_node, slotref, dv);
+          }
+          case 16: {
+            Decimal16Value dv = Decimal16Value::FromDouble(slotref->type(), v.val, &overflow);
+            return CreateOperate(scan_node, slotref, dv);
+          }
+          default:
+            DCHECK(false);
+            return NULL;
+        }
+      }
+      return CreateOperate(scan_node, slotref, v.val);
       break;
     }
     case TYPE_STRING:
     case TYPE_VARCHAR:
     case TYPE_CHAR: {
       StringVal v = static_cast<Literal*>(children_[1])->GetStringVal(NULL, NULL);
-      return CreateOperate(scan_node, StringValue::FromStringVal(v));
+      return CreateOperate(scan_node, slotref, StringValue::FromStringVal(v));
       break;
     }
     case TYPE_TIMESTAMP: {
       TimestampVal v = static_cast<Literal*>(children_[1])->GetTimestampVal(NULL, NULL);
-      return CreateOperate(scan_node, TimestampValue::FromTimestampVal(v));
+      return CreateOperate(scan_node, slotref, TimestampValue::FromTimestampVal(v));
       break;
     }
     case TYPE_DECIMAL: {
       DecimalVal v = static_cast<Literal*>(children_[1])->GetDecimalVal(NULL, NULL);
-      switch (children_[1]->type().GetByteSize()) {
+      bool overflow = false;
+      switch (slotref->type().GetByteSize()) {
         case 4:
-          return CreateOperate(scan_node, DecimalValue<int32_t>(v.val4));
+          return CreateOperate(scan_node, slotref,
+                     GetDecimal4Value(v, children_[1]->type(), &overflow));
           break;
         case 8:
-          return CreateOperate(scan_node, DecimalValue<int64_t>(v.val8));
+          return CreateOperate(scan_node, slotref,
+                     GetDecimal8Value(v, children_[1]->type(), &overflow));
           break;
         case 16:
-          return CreateOperate(scan_node, DecimalValue<int128_t>(v.val16));
+          return CreateOperate(scan_node, slotref,
+                     GetDecimal16Value(v, children_[1]->type(), &overflow));
           break;
         default:
           DCHECK(false) << type_.DebugString();
@@ -805,8 +856,8 @@ SimplePredicate* ScalarFnCall::CreateSimplePredicates(HdfsScanNode* scan_node) {
 }
 
 template<typename T>
-inline SimplePredicate* ScalarFnCall::CreateOperate(HdfsScanNode* scan_node, T val) {
-  SlotId slot_id = static_cast<SlotRef*>(children_[0])->slot_id();
+inline SimplePredicate* ScalarFnCall::CreateOperate(HdfsScanNode* scan_node, SlotRef* slotref, T val) {
+  SlotId slot_id = slotref->slot_id();
   const SlotDescriptor* slot_desc = scan_node->runtime_state()->desc_tbl().GetSlotDescriptor(slot_id);
   int slot_idx = scan_node->GetMaterializedSlotIdx(slot_desc->col_path());
 

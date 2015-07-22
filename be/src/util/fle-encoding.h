@@ -8046,26 +8046,15 @@ inline void FleDecoder::Lt(int64_t num_rows, dynamic_bitset<>& skip_bitset,
       C.push_back(0x0);
     }
   }
-  if (count_ != 64) {
-    uint64_t Mlt = 0x0;
-    uint64_t Meq = ~0x0;
-    int i = bit_width_ - 1;
-    uint64_t* tmp_buffer_end = buffer_end_ - bit_width_;
-    for (; i >= 0; --i) {
-      Mlt = Mlt | (Meq & C[i] & ~tmp_buffer_end[i]);
-      Meq = Meq & ~(tmp_buffer_end[i] ^ C[i]);
+
+  for (int i = count_; i != 64 && (i != 64+ num_vals_) && num_rows > 0; ++i, --num_rows) {
+    if (bit_width_ <= 8) {
+      skip_bitset.push_back(pcurrent_value8_[i] < value);
+    } else if (bit_width_ <= 16) {
+      skip_bitset.push_back(pcurrent_value16_[i] < value);
+    } else {
+      skip_bitset.push_back(current_value_[i] < value);
     }
-    std::bitset<64> tmp_bitset(Mlt);
-    if (count_ + num_rows < 64) {
-      for (int i = count_; i < count_ + num_rows; ++i) {
-        skip_bitset.push_back(tmp_bitset[63 - i]);
-      }
-      return;
-    }
-    for (int i = count_; i < 64; ++i) {
-      skip_bitset.push_back(tmp_bitset[63 - i]);
-    }
-    num_rows -= (64 - count_);
   }
 
   uint64_t start_idx = 0;
@@ -8079,10 +8068,22 @@ inline void FleDecoder::Lt(int64_t num_rows, dynamic_bitset<>& skip_bitset,
       Meq = Meq & ~(buffer_end_[j] ^ C[i]);
     }
     start_idx += bit_width_;
+
+    Mlt = ((Mlt >> 1) & 0x5555555555555555) | ((Mlt & 0x5555555555555555) << 1);
+    // swap consecutiMlte pairs
+    Mlt = ((Mlt >> 2) & 0x3333333333333333) | ((Mlt & 0x3333333333333333) << 2);
+    // swap nibbles ...
+    Mlt = ((Mlt >> 4) & 0x0F0F0F0F0F0F0F0F) | ((Mlt & 0x0F0F0F0F0F0F0F0F) << 4);
+    // swap bytes
+    Mlt = ((Mlt >> 8) & 0x00FF00FF00FF00FF) | ((Mlt & 0x00FF00FF00FF00FF) << 8);
+    // swap 2-byte long pairs
+    Mlt = ((Mlt >> 16) & 0x0000FFFF0000FFFF) | ((Mlt & 0x0000FFFF0000FFFF) << 16);
+    Mlt = ( Mlt >> 32                      ) | ( Mlt                       << 32);
+
     if (num_rows < 64) {
       std::bitset<64> tmp_bitset(Mlt);
       for (int i = 0; i < num_rows; ++i) {
-        skip_bitset.push_back(tmp_bitset[63 - i]);
+        skip_bitset.push_back(tmp_bitset[i]);
       }
       break;
     }
@@ -8101,26 +8102,15 @@ inline void FleDecoder::Le(int64_t num_rows, dynamic_bitset<>& skip_bitset,
       C.push_back(0x0);
     }
   }
-  if (count_ != 64) {
-    uint64_t Mlt = 0x0;
-    uint64_t Meq = ~0x0;
-    int i = bit_width_ - 1;
-    uint64_t* tmp_buffer_end = buffer_end_ - bit_width_;
-    for (; i >= 0; --i) {
-      Mlt = Mlt | (Meq & C[i] & ~tmp_buffer_end[i]);
-      Meq = Meq & ~(tmp_buffer_end[i] ^ C[i]);
+
+  for (int i = count_; i != 64 && (i != 64+ num_vals_) && num_rows > 0; ++i, --num_rows) {
+    if (bit_width_ <= 8) {
+      skip_bitset.push_back(pcurrent_value8_[i] <= value);
+    } else if (bit_width_ <= 16) {
+      skip_bitset.push_back(pcurrent_value16_[i] <= value);
+    } else {
+      skip_bitset.push_back(current_value_[i] <= value);
     }
-    std::bitset<64> tmp_bitset(Mlt|Meq);
-    if (count_ + num_rows < 64) {
-      for (int i = count_; i < count_ + num_rows; ++i) {
-        skip_bitset.push_back(tmp_bitset[63 - i]);
-      }
-      return;
-    }
-    for (int i = count_; i < 64; ++i) {
-      skip_bitset.push_back(tmp_bitset[63 - i]);
-    }
-    num_rows -= (64 - count_);
   }
 
   uint64_t start_idx = 0;
@@ -8134,14 +8124,26 @@ inline void FleDecoder::Le(int64_t num_rows, dynamic_bitset<>& skip_bitset,
       Meq = Meq & ~(buffer_end_[j] ^ C[i]);
     }
     start_idx += bit_width_;
+    uint64_t Mle = Mlt|Meq;
+    Mle = ((Mle >> 1) & 0x5555555555555555) | ((Mle & 0x5555555555555555) << 1);
+    // swap consecutiMlee pairs
+    Mle = ((Mle >> 2) & 0x3333333333333333) | ((Mle & 0x3333333333333333) << 2);
+    // swap nibbles ...
+    Mle = ((Mle >> 4) & 0x0F0F0F0F0F0F0F0F) | ((Mle & 0x0F0F0F0F0F0F0F0F) << 4);
+    // swap bytes
+    Mle = ((Mle >> 8) & 0x00FF00FF00FF00FF) | ((Mle & 0x00FF00FF00FF00FF) << 8);
+    // swap 2-byte long pairs
+    Mle = ((Mle >> 16) & 0x0000FFFF0000FFFF) | ((Mle & 0x0000FFFF0000FFFF) << 16);
+    Mle = ( Mle >> 32                      ) | ( Mle                       << 32);
+
     if (num_rows < 64) {
-      std::bitset<64> tmp_bitset(Mlt|Meq);
+      std::bitset<64> tmp_bitset(Mle);
       for (int i = 0; i < num_rows; ++i) {
-        skip_bitset.push_back(tmp_bitset[63 - i]);
+        skip_bitset.push_back(tmp_bitset[i]);
       }
       break;
     }
-    skip_bitset.append(Mlt|Meq);
+    skip_bitset.append(Mle);
     num_rows -= 64;
   }
 }
@@ -8156,27 +8158,17 @@ inline void FleDecoder::Gt(int64_t num_rows, dynamic_bitset<>& skip_bitset,
       C.push_back(0x0);
     }
   }
-  if (count_ != 64) {
-    uint64_t Mgt = 0x0;
-    uint64_t Meq = ~0x0;
-    int i = bit_width_ - 1;
-    uint64_t* tmp_buffer_end = buffer_end_ - bit_width_;
-    for (; i >= 0; --i) {
-      Mgt = Mgt | (Meq & ~C[i] & tmp_buffer_end[i]);
-      Meq = Meq & ~(tmp_buffer_end[i] ^ C[i]);
+
+  for (int i = count_; i != 64 && (i != 64+ num_vals_) && num_rows > 0; ++i, --num_rows) {
+    if (bit_width_ <= 8) {
+      skip_bitset.push_back(pcurrent_value8_[i] > value);
+    } else if (bit_width_ <= 16) {
+      skip_bitset.push_back(pcurrent_value16_[i] > value);
+    } else {
+      skip_bitset.push_back(current_value_[i] > value);
     }
-    std::bitset<64> tmp_bitset(Mgt);
-    if (count_ + num_rows < 64) {
-      for (int i = count_; i < count_ + num_rows; ++i) {
-        skip_bitset.push_back(tmp_bitset[63 - i]);
-      }
-      return;
-    }
-    for (int i = count_; i < 64; ++i) {
-      skip_bitset.push_back(tmp_bitset[63 - i]);
-    }
-    num_rows -= (64 - count_);
   }
+
   uint64_t start_idx = 0;
   while (num_rows > 0) {
     uint64_t Mgt = 0x0;
@@ -8188,10 +8180,22 @@ inline void FleDecoder::Gt(int64_t num_rows, dynamic_bitset<>& skip_bitset,
       Meq = Meq & ~(buffer_end_[j] ^ C[i]);
     }
     start_idx += bit_width_;
+
+    Mgt = ((Mgt >> 1) & 0x5555555555555555) | ((Mgt & 0x5555555555555555) << 1);
+    // swap consecutiMgte pairs
+    Mgt = ((Mgt >> 2) & 0x3333333333333333) | ((Mgt & 0x3333333333333333) << 2);
+    // swap nibbles ...
+    Mgt = ((Mgt >> 4) & 0x0F0F0F0F0F0F0F0F) | ((Mgt & 0x0F0F0F0F0F0F0F0F) << 4);
+    // swap bytes
+    Mgt = ((Mgt >> 8) & 0x00FF00FF00FF00FF) | ((Mgt & 0x00FF00FF00FF00FF) << 8);
+    // swap 2-byte long pairs
+    Mgt = ((Mgt >> 16) & 0x0000FFFF0000FFFF) | ((Mgt & 0x0000FFFF0000FFFF) << 16);
+    Mgt = ( Mgt >> 32                      ) | ( Mgt                       << 32);
+
     if (num_rows < 64) {
       std::bitset<64> tmp_bitset(Mgt);
       for (int i = 0; i < num_rows; ++i) {
-        skip_bitset.push_back(tmp_bitset[63 - i]);
+        skip_bitset.push_back(tmp_bitset[i]);
       }
       break;
     }
@@ -8210,26 +8214,15 @@ inline void FleDecoder::Ge(int64_t num_rows, dynamic_bitset<>& skip_bitset,
       C.push_back(0x0);
     }
   }
-  if (count_ != 64) {
-    uint64_t Mgt = 0x0;
-    uint64_t Meq = ~0x0;
-    int i = bit_width_ - 1;
-    uint64_t* tmp_buffer_end = buffer_end_ - bit_width_;
-    for (; i >= 0; --i) {
-      Mgt = Mgt | (Meq & ~C[i] & tmp_buffer_end[i]);
-      Meq = Meq & ~(tmp_buffer_end[i] ^ C[i]);
+
+  for (int i = count_; i != 64 && (i != 64+ num_vals_) && num_rows > 0; ++i, --num_rows) {
+    if (bit_width_ <= 8) {
+      skip_bitset.push_back(pcurrent_value8_[i] >= value);
+    } else if (bit_width_ <= 16) {
+      skip_bitset.push_back(pcurrent_value16_[i] >= value);
+    } else {
+      skip_bitset.push_back(current_value_[i] >= value);
     }
-    std::bitset<64> tmp_bitset(Mgt|Meq);
-    if (count_ + num_rows < 64) {
-      for (int i = count_; i < count_ + num_rows; ++i) {
-        skip_bitset.push_back(tmp_bitset[63 - i]);
-      }
-      return;
-    }
-    for (int i = count_; i < 64; ++i) {
-      skip_bitset.push_back(tmp_bitset[63 - i]);
-    }
-    num_rows -= (64 - count_);
   }
 
   uint64_t start_idx = 0;
@@ -8243,14 +8236,26 @@ inline void FleDecoder::Ge(int64_t num_rows, dynamic_bitset<>& skip_bitset,
       Meq = Meq & ~(buffer_end_[j] ^ C[i]);
     }
     start_idx += bit_width_;
+    uint64_t Mge = Mgt|Meq;
+    Mge = ((Mge >> 1) & 0x5555555555555555) | ((Mge & 0x5555555555555555) << 1);
+    // swap consecutiMgee pairs
+    Mge = ((Mge >> 2) & 0x3333333333333333) | ((Mge & 0x3333333333333333) << 2);
+    // swap nibbles ...
+    Mge = ((Mge >> 4) & 0x0F0F0F0F0F0F0F0F) | ((Mge & 0x0F0F0F0F0F0F0F0F) << 4);
+    // swap bytes
+    Mge = ((Mge >> 8) & 0x00FF00FF00FF00FF) | ((Mge & 0x00FF00FF00FF00FF) << 8);
+    // swap 2-byte long pairs
+    Mge = ((Mge >> 16) & 0x0000FFFF0000FFFF) | ((Mge & 0x0000FFFF0000FFFF) << 16);
+    Mge = ( Mge >> 32                      ) | ( Mge                       << 32);
+
     if (num_rows < 64) {
-      std::bitset<64> tmp_bitset(Mgt|Meq);
+      std::bitset<64> tmp_bitset(Mge);
       for (int i = 0; i < num_rows; ++i) {
-        skip_bitset.push_back(tmp_bitset[63 - i]);
+        skip_bitset.push_back(tmp_bitset[i]);
       }
       break;
     }
-    skip_bitset.append(Mgt|Meq);
+    skip_bitset.append(Mge);
     num_rows -= 64;
   }
 }

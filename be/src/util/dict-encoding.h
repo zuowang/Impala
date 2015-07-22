@@ -454,7 +454,7 @@ inline void DictDecoder<T>::Eq(int64_t num_rows, dynamic_bitset<>& skip_bitset,
   if (it == dict_.end() || val < *it) {
     skip_bitset.resize(num_rows, false);
   } else {
-    data_decoder_->Eq(num_rows, skip_bitset, it - dict_.begin());
+    data_decoder_->Eq(num_rows, skip_bitset, std::distance(dict_.begin(), it));
   }
 }
 
@@ -467,7 +467,7 @@ inline void DictDecoder<T>::Gt(int64_t num_rows, dynamic_bitset<>& skip_bitset,
     skip_bitset.resize(num_rows, true);
   } else {
     typename vector<T>::iterator it = std::upper_bound(dict_.begin(), dict_.end(), val);
-    data_decoder_->Ge(num_rows, skip_bitset, it - dict_.begin());
+    data_decoder_->Ge(num_rows, skip_bitset, std::distance(dict_.begin(), it));
   }
 }
 
@@ -480,7 +480,7 @@ inline void DictDecoder<T>::Lt(int64_t num_rows, dynamic_bitset<>& skip_bitset,
     skip_bitset.resize(num_rows, true);
   } else {
     typename vector<T>::iterator it = std::lower_bound(dict_.begin(), dict_.end(), val);
-    data_decoder_->Lt(num_rows, skip_bitset, it - dict_.begin());
+    data_decoder_->Lt(num_rows, skip_bitset, std::distance(dict_.begin(), it));
   }
 }
 
@@ -493,7 +493,7 @@ inline void DictDecoder<T>::Ge(int64_t num_rows, dynamic_bitset<>& skip_bitset,
     skip_bitset.resize(num_rows, true);
   } else {
     typename vector<T>::iterator it = std::lower_bound(dict_.begin(), dict_.end(), val);
-    data_decoder_->Ge(num_rows, skip_bitset, it - dict_.begin());
+    data_decoder_->Ge(num_rows, skip_bitset, std::distance(dict_.begin(), it));
   }
 }
 
@@ -505,7 +505,7 @@ inline void DictDecoder<T>::Le(int64_t num_rows, dynamic_bitset<>& skip_bitset, 
     skip_bitset.resize(num_rows, true);
   } else {
     typename vector<T>::iterator it = std::upper_bound(dict_.begin(), dict_.end(), val);
-    data_decoder_->Lt(num_rows, skip_bitset, it - dict_.begin());
+    data_decoder_->Lt(num_rows, skip_bitset, std::distance(dict_.begin(), it));
   }
 }
 
