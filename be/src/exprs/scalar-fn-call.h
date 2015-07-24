@@ -128,7 +128,7 @@ class ScalarFnCall: public Expr {
   RETURN_TYPE InterpretEval(ExprContext* context, TupleRow* row);
 
   template<typename T>
-  SimplePredicate* CreateOperate(HdfsScanNode* scan_node, SlotRef* slotref, T val);
+  SimplePredicate* CreateOperate(HdfsScanNode* scan_node, SlotRef* slotref, vector<T>& val);
 };
 
 }

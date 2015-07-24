@@ -182,13 +182,13 @@ class DictEncoder : public DictEncoderBase {
 class DictDecoderBase {
  public:
   // The rle encoded indices into the dictionary.
-  void SetData(uint8_t* buffer, int buffer_len, int num_values) {
+  void SetData(uint8_t* buffer, int buffer_len) {
     DCHECK_GT(buffer_len, 0);
     uint8_t bit_width = *buffer;
     DCHECK_GE(bit_width, 0);
     ++buffer;
     --buffer_len;
-    data_decoder_.reset(new FleDecoder(buffer, buffer_len, bit_width, num_values));
+    data_decoder_.reset(new FleDecoder(buffer, buffer_len, bit_width));
   }
 
   virtual ~DictDecoderBase() {}
@@ -226,6 +226,7 @@ class DictDecoder : public DictDecoderBase {
   inline void Lt(int64_t num_rows, dynamic_bitset<>& skip_bitset, T& val);
   inline void Ge(int64_t num_rows, dynamic_bitset<>& skip_bitset, T& val);
   inline void Le(int64_t num_rows, dynamic_bitset<>& skip_bitset, T& val);
+  inline void In(int64_t num_rows, dynamic_bitset<>& skip_bitset, vector<T>& vals);
  private:
   std::vector<T> dict_;
 };
@@ -506,6 +507,26 @@ inline void DictDecoder<T>::Le(int64_t num_rows, dynamic_bitset<>& skip_bitset, 
   } else {
     typename vector<T>::iterator it = std::upper_bound(dict_.begin(), dict_.end(), val);
     data_decoder_->Lt(num_rows, skip_bitset, std::distance(dict_.begin(), it));
+  }
+}
+
+template<typename T>
+inline void DictDecoder<T>::In(int64_t num_rows, dynamic_bitset<>& skip_bitset,
+    vector<T>& vals) {
+  vector<uint64_t> tmp_vals;
+  int vals_size = vals.size();
+  for (int i = 0; i < vals_size; ++i) {
+    typename vector<T>::iterator it = std::lower_bound(dict_.begin(), dict_.end(), vals[i]);
+    if (it == dict_.end() || vals[i] < *it) {
+      continue;
+    } else {
+      tmp_vals.push_back(std::distance(dict_.begin(), it));
+    }
+  }
+  if (tmp_vals.size() == 0) {
+    skip_bitset.resize(num_rows, false);
+  } else {
+    data_decoder_->In(num_rows, skip_bitset, tmp_vals);
   }
 }
 

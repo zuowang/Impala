@@ -34,14 +34,13 @@ namespace impala {
 
 class FleDecoder {
  public:
-  FleDecoder(uint8_t* buffer, int buffer_len, int bit_width, int num_vals)
-    : num_vals_(num_vals),
-      bit_width_(bit_width) {
+  FleDecoder(uint8_t* buffer, int buffer_len, int bit_width)
+    : bit_width_(bit_width) {
     DCHECK_GE(bit_width_, 0);
     DCHECK_LE(bit_width_, 64);
-    DCHECK_GE(buffer_len * 8 - num_vals * bit_width, 0);
     buffer_ = reinterpret_cast<uint64_t*>(buffer);
     buffer_end_ = buffer_;
+    buffer_end_guard_ = reinterpret_cast<uint64_t*>(buffer + buffer_len);
     count_ = 64;
     memset(&current_value_, 0, 64 * 4);
     pcurrent_value8_ = reinterpret_cast<uint8_t*>(current_value_);
@@ -215,6 +214,7 @@ class FleDecoder {
   void Le(int64_t num_rows, dynamic_bitset<>& skip_bitset, uint64_t value);
   void Gt(int64_t num_rows, dynamic_bitset<>& skip_bitset, uint64_t value);
   void Ge(int64_t num_rows, dynamic_bitset<>& skip_bitset, uint64_t value);
+  void In(int64_t num_rows, dynamic_bitset<>& skip_bitset, vector<uint64_t>& values);
   void Clear() {}
 
   int bit_width() { return bit_width_; }
@@ -231,7 +231,7 @@ class FleDecoder {
   __m256i shf_ret1_mask;
   uint64_t* buffer_;
   uint64_t* buffer_end_;
-  int num_vals_;
+  uint64_t* buffer_end_guard_;
   int bit_width_;
   uint32_t current_value_[64];
   uint8_t* pcurrent_value8_;
@@ -343,25 +343,22 @@ class FleEncoder {
 
 template<typename T>
 inline bool FleDecoder::Get(T* val, int skip_rows) {
-  if (UNLIKELY(count_ == num_vals_ + 64)) return false;
   if (UNLIKELY(count_ == 64)) {
     count_ = skip_rows & (64 - 1);
     int skip_64 = (skip_rows & ~(64 - 1)) >> 6;
     buffer_end_ += bit_width_ * skip_64;
-    num_vals_ -= 64 * skip_64;
+    if (buffer_end_ > buffer_end_guard_) return false;
     unpack_function_();
     buffer_end_ += bit_width_;
-    num_vals_ -= 64;
   } else {
     skip_rows += count_;
     count_ = skip_rows & (64 - 1);
     if (skip_rows >= 64) {
       int skip_64 = ((skip_rows & ~(64 - 1)) >> 6) - 1;
       buffer_end_ += bit_width_ * skip_64;
-      num_vals_ -= 64 * skip_64;
+      if (buffer_end_ > buffer_end_guard_) return false;
       unpack_function_();
       buffer_end_ += bit_width_;
-      num_vals_ -= 64;
     }
   }
 
@@ -382,25 +379,22 @@ inline bool FleDecoder::Get(T* val, int skip_rows) {
 }
 
 inline bool FleDecoder::Skip(int skip_rows) {
-  if (UNLIKELY(count_ == num_vals_ + 64)) return false;
   if (UNLIKELY(count_ == 64)) {
     count_ = skip_rows & (64 - 1);
     int skip_64 = (skip_rows & ~(64 - 1)) >> 6;
     buffer_end_ += bit_width_ * skip_64;
-    num_vals_ -= 64 * skip_64;
+    if (buffer_end_ > buffer_end_guard_) return false;
     unpack_function_();
     buffer_end_ += bit_width_;
-    num_vals_ -= 64;
   } else {
     skip_rows += count_;
     count_ = skip_rows & (64 - 1);
     if (skip_rows >= 64) {
       int skip_64 = ((skip_rows & ~(64 - 1)) >> 6) - 1;
       buffer_end_ += bit_width_ * skip_64;
-      num_vals_ -= 64 * skip_64;
+      if (buffer_end_ > buffer_end_guard_) return false;
       unpack_function_();
       buffer_end_ += bit_width_;
-      num_vals_ -= 64;
     }
   }
 
@@ -409,8 +403,8 @@ inline bool FleDecoder::Skip(int skip_rows) {
 
 template<typename T>
 inline bool FleDecoder::Get(T* val) {
-  if (UNLIKELY(count_ == 64 || (num_vals_ < 0 && count_ == num_vals_ + 64))) {
-    if (num_vals_ <= 0) return false;
+  if (UNLIKELY(count_ == 64)) {
+    if (buffer_end_ > buffer_end_guard_) return false;
     count_ = 0;
 //    for (int i = 0; i < bit_width_; ++i) {
 //      uint64_t value = buffer_end_[i];
@@ -542,7 +536,6 @@ inline bool FleDecoder::Get(T* val) {
     }
 */
     buffer_end_ += bit_width_;
-    num_vals_ -= 64;
   }
 
 //  *val = current_value_[count_];
@@ -7977,7 +7970,7 @@ inline void FleDecoder::Eq(int64_t num_rows, dynamic_bitset<>& skip_bitset,
     }
   }
 
-  for (int i = count_; i != 64 && (i != 64+ num_vals_) && num_rows > 0; ++i, --num_rows) {
+  for (int i = count_; i != 64 && num_rows > 0; ++i, --num_rows) {
     if (bit_width_ <= 8) {
       skip_bitset.push_back(pcurrent_value8_[i] == value);
     } else if (bit_width_ <= 16) {
@@ -7986,26 +7979,6 @@ inline void FleDecoder::Eq(int64_t num_rows, dynamic_bitset<>& skip_bitset,
       skip_bitset.push_back(current_value_[i] == value);
     }
   }
-
-//  if (count_ != 64) {
-//    uint64_t Meq = ~0x0;
-//    int i = bit_width_ - 1;
-//    uint64_t* tmp_buffer_end = buffer_end_ - bit_width_;
-//    for (; i >= 0; --i) {
-//      Meq = Meq & ~(tmp_buffer_end[i] ^ C[i]);
-//    }
-//    std::bitset<64> tmp_bitset(Meq);
-//    if (count_ + num_rows < 64) {
-//      for (int i = count_; i < count_ + num_rows; ++i) {
-//        skip_bitset.push_back(tmp_bitset[63 - i]);
-//      }
-//      return;
-//    }
-//    for (int i = count_; i < 64; ++i) {
-//      skip_bitset.push_back(tmp_bitset[63 - i]);
-//    }
-//    num_rows -= (64 - count_);
-//  }
 
   uint64_t j = 0;
   while (num_rows > 0) {
@@ -8047,7 +8020,7 @@ inline void FleDecoder::Lt(int64_t num_rows, dynamic_bitset<>& skip_bitset,
     }
   }
 
-  for (int i = count_; i != 64 && (i != 64+ num_vals_) && num_rows > 0; ++i, --num_rows) {
+  for (int i = count_; i != 64 && num_rows > 0; ++i, --num_rows) {
     if (bit_width_ <= 8) {
       skip_bitset.push_back(pcurrent_value8_[i] < value);
     } else if (bit_width_ <= 16) {
@@ -8103,7 +8076,7 @@ inline void FleDecoder::Le(int64_t num_rows, dynamic_bitset<>& skip_bitset,
     }
   }
 
-  for (int i = count_; i != 64 && (i != 64+ num_vals_) && num_rows > 0; ++i, --num_rows) {
+  for (int i = count_; i != 64 && num_rows > 0; ++i, --num_rows) {
     if (bit_width_ <= 8) {
       skip_bitset.push_back(pcurrent_value8_[i] <= value);
     } else if (bit_width_ <= 16) {
@@ -8159,7 +8132,7 @@ inline void FleDecoder::Gt(int64_t num_rows, dynamic_bitset<>& skip_bitset,
     }
   }
 
-  for (int i = count_; i != 64 && (i != 64+ num_vals_) && num_rows > 0; ++i, --num_rows) {
+  for (int i = count_; i != 64 && num_rows > 0; ++i, --num_rows) {
     if (bit_width_ <= 8) {
       skip_bitset.push_back(pcurrent_value8_[i] > value);
     } else if (bit_width_ <= 16) {
@@ -8215,7 +8188,7 @@ inline void FleDecoder::Ge(int64_t num_rows, dynamic_bitset<>& skip_bitset,
     }
   }
 
-  for (int i = count_; i != 64 && (i != 64+ num_vals_) && num_rows > 0; ++i, --num_rows) {
+  for (int i = count_; i != 64 && num_rows > 0; ++i, --num_rows) {
     if (bit_width_ <= 8) {
       skip_bitset.push_back(pcurrent_value8_[i] >= value);
     } else if (bit_width_ <= 16) {
@@ -8260,6 +8233,84 @@ inline void FleDecoder::Ge(int64_t num_rows, dynamic_bitset<>& skip_bitset,
   }
 }
 
+inline void FleDecoder::In(int64_t num_rows, dynamic_bitset<>& skip_bitset,
+    vector<uint64_t>& values) {
+  int values_size = values.size();
+  vector<vector<uint64_t> > VC;
+  for (int j = 0; j < values_size; ++j) {
+    vector<uint64_t> C;
+    for (int i = 0; i < bit_width_; ++i) {
+      if (values[j] & 0x01 << i) {
+        C.push_back(~0x0);
+      } else {
+        C.push_back(0x0);
+      }
+    }
+    VC.push_back(C);
+  }
+
+  bool flag = false;
+  if (bit_width_ <= 8) {
+    for (int i = count_; i != 64 && num_rows > 0; ++i, --num_rows) {
+      flag = false;
+      for (int j = 0; j < values_size; ++j) {
+        flag = flag || pcurrent_value8_[i] == values[j];
+      }
+      skip_bitset.push_back(flag);
+    }
+  } else if (bit_width_ <= 16) {
+    for (int i = count_; i != 64 && num_rows > 0; ++i, --num_rows) {
+      flag = false;
+      for (int j = 0; j < values_size; ++j) {
+        flag = flag || pcurrent_value16_[i] == values[j];
+      }
+      skip_bitset.push_back(flag);
+    }
+  } else {
+    for (int i = count_; i != 64 && num_rows > 0; ++i, --num_rows) {
+      flag = false;
+      for (int j = 0; j < values_size; ++j) {
+        flag = flag || current_value_[i] == values[j];
+      }
+      skip_bitset.push_back(flag);
+    }
+  }
+
+  uint64_t j = 0;
+  while (num_rows > 0) {
+    uint64_t start_j = j;
+    uint64_t Many_eq = 0x0;
+    for (int v = 0; v < values_size; ++v) {
+      j = start_j;
+      uint64_t Meq = ~0x0;
+      for (int i = 0; i < bit_width_; ++i, ++j) {
+        Meq = Meq & ~(buffer_end_[j] ^ VC[v][i]);
+      }
+      Many_eq |= Meq;
+    }
+
+    Many_eq = ((Many_eq >> 1) & 0x5555555555555555) | ((Many_eq & 0x5555555555555555) << 1);
+    // swap consecutiMany_eqe pairs
+    Many_eq = ((Many_eq >> 2) & 0x3333333333333333) | ((Many_eq & 0x3333333333333333) << 2);
+    // swap nibbles ...
+    Many_eq = ((Many_eq >> 4) & 0x0F0F0F0F0F0F0F0F) | ((Many_eq & 0x0F0F0F0F0F0F0F0F) << 4);
+    // swap bytes
+    Many_eq = ((Many_eq >> 8) & 0x00FF00FF00FF00FF) | ((Many_eq & 0x00FF00FF00FF00FF) << 8);
+    // swap 2-byte long pairs
+    Many_eq = ((Many_eq >> 16) & 0x0000FFFF0000FFFF) | ((Many_eq & 0x0000FFFF0000FFFF) << 16);
+    Many_eq = ( Many_eq >> 32                      ) | ( Many_eq                       << 32);
+
+    if (num_rows < 64) {
+      std::bitset<64> tmp_bitset(Many_eq);
+      for (int i = 0; i < num_rows; ++i) {
+        skip_bitset.push_back(tmp_bitset[i]);
+      }
+      break;
+    }
+    skip_bitset.append(Many_eq);
+    num_rows -= 64;
+  }
+}
 
 inline bool FleEncoder::Put(uint64_t value) {
   DCHECK(bit_width_ == 64 || value < (1LL << bit_width_));

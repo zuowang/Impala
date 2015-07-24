@@ -98,6 +98,8 @@ class HdfsParquetScanner : public HdfsScanner {
   void Gt(int idx, int64_t num_rows, boost::dynamic_bitset<>& skip_bitset, T& val);
   template<typename T>
   void Ge(int idx, int64_t num_rows, boost::dynamic_bitset<>& skip_bitset, T& val);
+  template<typename T>
+  void In(int idx, int64_t num_rows, boost::dynamic_bitset<>& skip_bitset, vector<T>& val);
 
   void Eq(){}
  private:
@@ -135,13 +137,6 @@ class HdfsParquetScanner : public HdfsScanner {
   template<typename T> friend class ColumnReader;
   class BoolColumnReader;
   friend class BoolColumnReader;
-
-  template<typename T> class EqOperate;
-  template<typename T> class LtOperate;
-  template<typename T> class LeOperate;
-  template<typename T> class GtOperate;
-  template<typename T> class GeOperate;
-
 
   // Column reader for each materialized columns for this file.
   std::vector<BaseColumnReader*> column_readers_;

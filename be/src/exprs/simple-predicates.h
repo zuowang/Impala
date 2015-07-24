@@ -129,6 +129,19 @@ class GeOperate : public SimplePredicate {
   T val_;
 };
 
+template <typename T>
+class InOperate : public SimplePredicate {
+ public:
+  virtual void GetBitset(HdfsParquetScanner* scanner, int64_t num_rows,
+      boost::dynamic_bitset<>& skip_bitset);
+
+  InOperate(int idx, vector<T> vals) : idx_(idx), vals_(vals.begin(), vals.end()) { }
+
+ private:
+  int idx_;
+  vector<T> vals_;
+};
+
 inline void AndOperate::GetBitset(HdfsParquetScanner* scanner, int64_t num_rows,
     boost::dynamic_bitset<>& skip_bitset) {
   DCHECK(child0_);
@@ -182,6 +195,13 @@ inline void GeOperate<T>::GetBitset(HdfsParquetScanner* scanner, int64_t num_row
     boost::dynamic_bitset<>& skip_bitset) {
   DCHECK(scanner);
   scanner->Ge(idx_, num_rows, skip_bitset, val_);
+}
+
+template <typename T>
+inline void InOperate<T>::GetBitset(HdfsParquetScanner* scanner, int64_t num_rows,
+    boost::dynamic_bitset<>& skip_bitset) {
+  DCHECK(scanner);
+  scanner->In(idx_, num_rows, skip_bitset, vals_);
 }
 
 }

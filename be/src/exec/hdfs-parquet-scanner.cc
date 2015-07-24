@@ -192,10 +192,8 @@ class HdfsParquetScanner::BaseColumnReader {
   // one call.  e.g. MaterializeCol would write out 1024 values.  Our row batches
   // are currently dense so we'll need to figure out something there.
   bool ReadValue(MemPool* pool, Tuple* tuple, bool* conjuncts_failed);
-
-  bool ReadValue(MemPool* pool, Tuple* tuple);
-
   bool ReadValue(MemPool* pool, Tuple* tuple, int skip_rows);
+  bool SkipValue(int skip_rows);
 
   // TODO: Some encodings might benefit a lot from a SkipValues(int num_rows) if
   // we know this row can be skipped. This could be very useful with stats and big
@@ -292,17 +290,12 @@ class HdfsParquetScanner::BaseColumnReader {
   // TODO: we need to remove this with codegen.
   virtual bool ReadSlot(void* slot, MemPool* pool, bool* conjuncts_failed) = 0;
 
-  virtual bool ReadSlot(void* slot, MemPool* pool) {
-    DCHECK(false);
-    return false;
-  };
-
   virtual bool ReadSlot(void* slot, MemPool* pool, int skip_rows) {
     DCHECK(false);
     return false;
   }
 
-  virtual bool SkipValue(int skip_rows) {
+  virtual bool SkipSlot(int skip_rows) {
     DCHECK(false);
     return false;
   }
@@ -432,6 +425,25 @@ class HdfsParquetScanner::ColumnReader : public HdfsParquetScanner::BaseColumnRe
     }
   }
 
+  void In(int64_t num_rows, dynamic_bitset<>& skip_bitset, vector<T>& vals) {
+    parquet::Encoding::type page_encoding =
+        current_page_header_.data_page_header.encoding;
+    if (page_encoding == parquet::Encoding::PLAIN_DICTIONARY ||
+        page_encoding == parquet::Encoding::FLE_DICTIONARY) {
+    if (max_def_level() == 0) {
+      dict_decoder_->In(num_rows, skip_bitset, vals);
+      return;
+    }
+    fle_def_levels_->Eq(num_rows, skip_bitset, max_def_level());
+    dynamic_bitset<> data_bitset;
+    dict_decoder_->In(skip_bitset.count(), data_bitset, vals);
+    IntersectBitset(skip_bitset, data_bitset);
+    } else {
+      DCHECK(page_encoding == parquet::Encoding::PLAIN);
+      ParquetPlainEncoder::In<T>(data_, fixed_len_size_, num_rows, skip_bitset, vals);
+    }
+  }
+
  protected:
   virtual void CreateDictionaryDecoder(uint8_t* values, int size) {
     dict_decoder_.reset(new DictDecoder<T>(values, size, fixed_len_size_));
@@ -446,7 +458,7 @@ class HdfsParquetScanner::ColumnReader : public HdfsParquetScanner::BaseColumnRe
       if (dict_decoder_.get() == NULL) {
         return Status("File corrupt. Missing dictionary page.");
       }
-      dict_decoder_->SetData(data, size, current_page_header_.data_page_header.num_values);
+      dict_decoder_->SetData(data, size);
     }
 
     // Check if we should disable the bitmap filter. We'll do this if the filter
@@ -518,26 +530,18 @@ class HdfsParquetScanner::ColumnReader : public HdfsParquetScanner::BaseColumnRe
     return result;
   }
 
-  virtual bool SkipValue(int skip_rows)  {
-    int tmp_skip_rows = 0;
-    for (int  i = 0; i < skip_rows; ++i) {
-      int definition_level = ReadDefinitionLevel();
-      if (definition_level < 0) return false;
-      if (definition_level != max_def_level()) continue;
-      ++tmp_skip_rows;
-    }
-
-    if (tmp_skip_rows <= 0) return true;
+  virtual bool SkipSlot(int skip_rows) {
+    if (skip_rows <= 0) return true;
     parquet::Encoding::type page_encoding =
         current_page_header_.data_page_header.encoding;
     bool result = true;
     if (page_encoding == parquet::Encoding::PLAIN_DICTIONARY ||
         page_encoding == parquet::Encoding::FLE_DICTIONARY) {
-      result = dict_decoder_->SkipValue(tmp_skip_rows);
+      result = dict_decoder_->SkipValue(skip_rows);
     } else {
       DCHECK(page_encoding == parquet::Encoding::PLAIN);
       T* val_ptr = NULL;
-      data_ += ParquetPlainEncoder::Skip<T>(data_, fixed_len_size_, val_ptr, tmp_skip_rows);
+      data_ += ParquetPlainEncoder::Skip<T>(data_, fixed_len_size_, val_ptr, skip_rows);
     }
     return result;
   }
@@ -892,8 +896,7 @@ Status HdfsParquetScanner::BaseColumnReader::ReadDataPage() {
             return status;
           }
           int bit_width = BitUtil::Log2(max_def_level() + 1);
-          fle_def_levels_.reset(new FleDecoder(data_, num_definition_bytes, bit_width,
-              current_page_header_.data_page_header.num_values));
+          fle_def_levels_.reset(new FleDecoder(data_, num_definition_bytes, bit_width));
           break;
         }
         case parquet::Encoding::BIT_PACKED:
@@ -1000,30 +1003,6 @@ inline bool HdfsParquetScanner::BaseColumnReader::ReadValue(
   return ReadSlot(tuple->GetSlot(slot_desc()->tuple_offset()), pool, conjuncts_failed);
 }
 
-inline bool HdfsParquetScanner::BaseColumnReader::ReadValue(MemPool* pool, Tuple* tuple) {
-  if (num_buffered_values_ == 0) {
-    parent_->assemble_rows_timer_.Stop();
-    parent_->parse_status_ = ReadDataPage();
-    // We don't return Status objects as parameters because they are too
-    // expensive for per row/per col calls.  If ReadDataPage failed,
-    // return false to indicate this column reader is done.
-    if (num_buffered_values_ == 0 || !parent_->parse_status_.ok()) return false;
-    parent_->assemble_rows_timer_.Start();
-  }
-
-  --num_buffered_values_;
-  int definition_level = ReadDefinitionLevel();
-  if (definition_level < 0) return false;
-
-  if (definition_level != max_def_level()) {
-    // Null value
-    DCHECK_LT(definition_level, max_def_level());
-    tuple->SetNull(slot_desc()->null_indicator_offset());
-    return true;
-  }
-  return ReadSlot(tuple->GetSlot(slot_desc()->tuple_offset()), pool);
-}
-
 inline bool HdfsParquetScanner::BaseColumnReader::ReadValue(
     MemPool* pool, Tuple* tuple, int skip_rows) {
   int tmp_skip_rows = 0;
@@ -1041,10 +1020,21 @@ inline bool HdfsParquetScanner::BaseColumnReader::ReadValue(
     // Null value
     DCHECK_LT(definition_level, max_def_level());
     tuple->SetNull(slot_desc()->null_indicator_offset());
-    if (tmp_skip_rows > 0) SkipValue(tmp_skip_rows);
+    if (!SkipSlot(tmp_skip_rows)) return false;
     return true;
   }
   return ReadSlot(tuple->GetSlot(slot_desc()->tuple_offset()), pool, tmp_skip_rows);
+}
+
+inline bool HdfsParquetScanner::BaseColumnReader::SkipValue(int skip_rows) {
+  int tmp_skip_rows = 0;
+  for (int  i = 0; i < skip_rows; ++i) {
+    int definition_level = ReadDefinitionLevel();
+    if (definition_level < 0) return false;
+    if (definition_level != max_def_level()) continue;
+    ++tmp_skip_rows;
+  }
+  return SkipSlot(tmp_skip_rows);
 }
 
 Status HdfsParquetScanner::ProcessSplit() {
@@ -1833,10 +1823,6 @@ string HdfsParquetScanner::SchemaNode::DebugString(int indent) const {
 }
 
 void HdfsParquetScanner::CreateSimplePredicates() {
-  vector<void*> column_readers;
-  for (int i = 0; i < column_readers_.size(); ++i) {
-    column_readers.push_back(reinterpret_cast<void*>(column_readers_[i]));
-  }
   for (int i = 0; i < conjunct_ctxs_.size(); ++i) {
     SimplePredicate* root =
         conjunct_ctxs_[i]->CreateSimplePredicates(scan_node_);
@@ -1911,6 +1897,13 @@ void HdfsParquetScanner::Ge(int idx, int64_t num_rows,
     boost::dynamic_bitset<>& skip_bitset, T& val){
   reinterpret_cast<HdfsParquetScanner::ColumnReader<T>*>(column_readers_[idx])->Ge(
       num_rows, skip_bitset, val);
+}
+
+template<typename T>
+void HdfsParquetScanner::In(int idx, int64_t num_rows,
+    boost::dynamic_bitset<>& skip_bitset, vector<T>& vals){
+  reinterpret_cast<HdfsParquetScanner::ColumnReader<T>*>(column_readers_[idx])->In(
+      num_rows, skip_bitset, vals);
 }
 
 template void HdfsParquetScanner::Eq<int8_t>(int idx, int64_t num_rows,
@@ -2027,6 +2020,29 @@ template void HdfsParquetScanner::Ge<Decimal8Value>(int idx, int64_t num_rows,
     boost::dynamic_bitset<>& skip_bitset, Decimal8Value& val);
 template void HdfsParquetScanner::Ge<Decimal16Value>(int idx, int64_t num_rows,
     boost::dynamic_bitset<>& skip_bitset, Decimal16Value& val);
+
+template void HdfsParquetScanner::In<int8_t>(int idx, int64_t num_rows,
+    boost::dynamic_bitset<>& skip_bitset, vector<int8_t>& val);
+template void HdfsParquetScanner::In<int16_t>(int idx, int64_t num_rows,
+    boost::dynamic_bitset<>& skip_bitset, vector<int16_t>& val);
+template void HdfsParquetScanner::In<int32_t>(int idx, int64_t num_rows,
+    boost::dynamic_bitset<>& skip_bitset, vector<int32_t>& val);
+template void HdfsParquetScanner::In<int64_t>(int idx, int64_t num_rows,
+    boost::dynamic_bitset<>& skip_bitset, vector<int64_t>& val);
+template void HdfsParquetScanner::In<float>(int idx, int64_t num_rows,
+    boost::dynamic_bitset<>& skip_bitset, vector<float>& val);
+template void HdfsParquetScanner::In<double>(int idx, int64_t num_rows,
+    boost::dynamic_bitset<>& skip_bitset, vector<double>& val);
+template void HdfsParquetScanner::In<TimestampValue>(int idx, int64_t num_rows,
+    boost::dynamic_bitset<>& skip_bitset, vector<TimestampValue>& val);
+template void HdfsParquetScanner::In<StringValue>(int idx, int64_t num_rows,
+    boost::dynamic_bitset<>& skip_bitset, vector<StringValue>& val);
+template void HdfsParquetScanner::In<Decimal4Value>(int idx, int64_t num_rows,
+    boost::dynamic_bitset<>& skip_bitset, vector<Decimal4Value>& val);
+template void HdfsParquetScanner::In<Decimal8Value>(int idx, int64_t num_rows,
+    boost::dynamic_bitset<>& skip_bitset, vector<Decimal8Value>& val);
+template void HdfsParquetScanner::In<Decimal16Value>(int idx, int64_t num_rows,
+    boost::dynamic_bitset<>& skip_bitset, vector<Decimal16Value>& val);
 
 template class HdfsParquetScanner::ColumnReader<int8_t>;
 template class HdfsParquetScanner::ColumnReader<int16_t>;
