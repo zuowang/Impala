@@ -347,7 +347,7 @@ inline bool FleDecoder::Get(T* val, int skip_rows) {
     count_ = skip_rows & (64 - 1);
     int skip_64 = (skip_rows & ~(64 - 1)) >> 6;
     buffer_end_ += bit_width_ * skip_64;
-    if (buffer_end_ > buffer_end_guard_) return false;
+    if (buffer_end_ >= buffer_end_guard_) return false;
     unpack_function_();
     buffer_end_ += bit_width_;
   } else {
@@ -356,7 +356,7 @@ inline bool FleDecoder::Get(T* val, int skip_rows) {
     if (skip_rows >= 64) {
       int skip_64 = ((skip_rows & ~(64 - 1)) >> 6) - 1;
       buffer_end_ += bit_width_ * skip_64;
-      if (buffer_end_ > buffer_end_guard_) return false;
+      if (buffer_end_ >= buffer_end_guard_) return false;
       unpack_function_();
       buffer_end_ += bit_width_;
     }
@@ -383,7 +383,7 @@ inline bool FleDecoder::Skip(int skip_rows) {
     count_ = skip_rows & (64 - 1);
     int skip_64 = (skip_rows & ~(64 - 1)) >> 6;
     buffer_end_ += bit_width_ * skip_64;
-    if (buffer_end_ > buffer_end_guard_) return false;
+    if (buffer_end_ >= buffer_end_guard_) return false;
     unpack_function_();
     buffer_end_ += bit_width_;
   } else {
@@ -392,7 +392,7 @@ inline bool FleDecoder::Skip(int skip_rows) {
     if (skip_rows >= 64) {
       int skip_64 = ((skip_rows & ~(64 - 1)) >> 6) - 1;
       buffer_end_ += bit_width_ * skip_64;
-      if (buffer_end_ > buffer_end_guard_) return false;
+      if (buffer_end_ >= buffer_end_guard_) return false;
       unpack_function_();
       buffer_end_ += bit_width_;
     }
@@ -404,7 +404,7 @@ inline bool FleDecoder::Skip(int skip_rows) {
 template<typename T>
 inline bool FleDecoder::Get(T* val) {
   if (UNLIKELY(count_ == 64)) {
-    if (buffer_end_ > buffer_end_guard_) return false;
+    if (buffer_end_ >= buffer_end_guard_) return false;
     count_ = 0;
 //    for (int i = 0; i < bit_width_; ++i) {
 //      uint64_t value = buffer_end_[i];
@@ -8315,7 +8315,7 @@ inline void FleDecoder::In(int64_t num_rows, dynamic_bitset<>& skip_bitset,
 inline bool FleEncoder::Put(uint64_t value) {
   DCHECK(bit_width_ == 64 || value < (1LL << bit_width_));
   if (UNLIKELY(count_ == 64)) {
-    if (buffer_end_ > buffer_end_guard_) return false;
+    if (buffer_end_ >= buffer_end_guard_) return false;
 
 //    for (int i = 0; i < bit_width_; ++i) {
 //      buffer_end_[i] = 0;

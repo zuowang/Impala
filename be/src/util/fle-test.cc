@@ -190,7 +190,7 @@ void ValidateFle(const vector<int>& values, int bit_width,
   }
 
   // Verify read
-  FleDecoder decoder(buffer, len, bit_width, values.size());
+  FleDecoder decoder(buffer, len, bit_width);
   for (int i = 0; i < values.size(); ++i) {
     uint64_t val;
     bool result = decoder.Get(&val);

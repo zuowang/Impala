@@ -52,7 +52,7 @@ void ValidateDict(const vector<T>& values, int fixed_buffer_byte_size) {
 
   DictDecoder<T> decoder(
       dict_buffer, encoder.dict_encoded_size(), fixed_buffer_byte_size);
-  decoder.SetData(data_buffer, data_len, values.size());
+  decoder.SetData(data_buffer, data_len);
   BOOST_FOREACH(T i, values) {
     T j;
     decoder.GetValue(&j);

@@ -424,13 +424,23 @@ inline int DictEncoderBase::WriteData(uint8_t* buffer, int buffer_len) {
 
 inline int DictEncoderBase::WriteData(uint8_t* buffer, int buffer_len, vector<int>& node_indices) {
   // Write bit width in first byte
-  *buffer = bit_width();
-  ++buffer;
+  //*buffer = bit_width();
+  //++buffer;
   --buffer_len;
 
-  FleEncoder encoder(buffer, buffer_len, bit_width());
+  int max_indice = -1;
+  FleEncoder encoder(buffer + 1, buffer_len, bit_width());
   BOOST_FOREACH(int index, node_indices) {
     if (!encoder.Put(to_sorted_indice_[index])) return -1;
+    if (index > max_indice) max_indice = index;
+  }
+  // Write bit width in first byte
+  if (UNLIKELY(max_indice == -1)) {
+    *buffer = 0;
+  } else if (UNLIKELY(max_indice == 0)) {
+    *buffer = 1;
+  } else {
+    *buffer = BitUtil::Log2(max_indice + 1);
   }
   encoder.Flush();
   return 1 + encoder.len();

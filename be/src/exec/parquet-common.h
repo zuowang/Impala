@@ -251,7 +251,7 @@ class ParquetPlainEncoder {
 
   template<typename T>
   static void In(uint8_t* buffer, int fixed_len_size, int64_t num_rows,
-    dynamic_bitset<>& skip_bitset, vector<T>& val) {
+    dynamic_bitset<>& skip_bitset, std::vector<T>& val) {
   }
 
   // Encode 't', which must be in the machine endian, to FIXED_LEN_BYTE_ARRAY
