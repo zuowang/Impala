@@ -26,6 +26,7 @@
 #include "runtime/disk-io-mgr.h"
 #include "runtime/mem-pool.h"
 #include "runtime/mem-tracker.h"
+#include "util/mem-util.h"
 
 namespace impala {
 
@@ -173,7 +174,7 @@ class RowBatch {
   void TransferResourceOwnership(RowBatch* dest);
 
   void CopyRow(TupleRow* src, TupleRow* dest) {
-    memcpy(dest, src, num_tuples_per_row_ * sizeof(Tuple*));
+    MemUtil::memcpy(dest, src, num_tuples_per_row_ * sizeof(Tuple*));
   }
 
   /// Copy 'num_rows' rows from 'src' to 'dest' within the batch. Useful for exec

@@ -39,6 +39,7 @@
 #include "runtime/tuple-row.h"
 #include "udf/udf-internal.h"
 #include "util/debug-util.h"
+#include "util/mem-util.h"
 #include "util/runtime-profile.h"
 
 #include "gen-cpp/Exprs_types.h"
@@ -942,7 +943,7 @@ void PartitionedAggregationNode::CopyGroupingValues(Tuple* intermediate_tuple,
     } else {
       void* src = ht_ctx_->last_expr_value(i);
       void* dst = intermediate_tuple->GetSlot(slot_desc->tuple_offset());
-      memcpy(dst, src, slot_desc->slot_size());
+      MemUtil::memcpy(dst, src, slot_desc->slot_size());
     }
   }
 
@@ -953,7 +954,7 @@ void PartitionedAggregationNode::CopyGroupingValues(Tuple* intermediate_tuple,
     // ptr and len were already copied to the fixed-len part of string value
     StringValue* sv = reinterpret_cast<StringValue*>(
         intermediate_tuple->GetSlot(slot_desc->tuple_offset()));
-    memcpy(buffer, sv->ptr, sv->len);
+    MemUtil::memcpy(buffer, sv->ptr, sv->len);
     sv->ptr = reinterpret_cast<char*>(buffer);
     buffer += sv->len;
   }

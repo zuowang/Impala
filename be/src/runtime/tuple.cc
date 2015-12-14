@@ -25,6 +25,7 @@
 #include "runtime/tuple-row.h"
 #include "runtime/string-value.h"
 #include "util/debug-util.h"
+#include "util/mem-util.h"
 
 #include "common/names.h"
 
@@ -74,7 +75,7 @@ Tuple* Tuple::DeepCopy(const TupleDescriptor& desc, MemPool* pool) {
 // memory is allocated - can we templatise it somehow to avoid redundancy without runtime
 // overhead.
 void Tuple::DeepCopy(Tuple* dst, const TupleDescriptor& desc, MemPool* pool) {
-  memcpy(dst, this, desc.byte_size());
+  MemUtil::memcpy(dst, this, desc.byte_size());
   if (desc.HasVarlenSlots()) dst->DeepCopyVarlenData(desc, pool);
 }
 
@@ -86,7 +87,7 @@ void Tuple::DeepCopyVarlenData(const TupleDescriptor& desc, MemPool* pool) {
     if (IsNull((*slot)->null_indicator_offset())) continue;
     StringValue* string_v = GetStringSlot((*slot)->tuple_offset());
     char* string_copy = reinterpret_cast<char*>(pool->Allocate(string_v->len));
-    memcpy(string_copy, string_v->ptr, string_v->len);
+    MemUtil::memcpy(string_copy, string_v->ptr, string_v->len);
     string_v->ptr = string_copy;
   }
 
@@ -98,7 +99,7 @@ void Tuple::DeepCopyVarlenData(const TupleDescriptor& desc, MemPool* pool) {
     const TupleDescriptor* item_desc = (*slot)->collection_item_descriptor();
     int coll_byte_size = cv->num_tuples * item_desc->byte_size();
     uint8_t* coll_data = reinterpret_cast<uint8_t*>(pool->Allocate(coll_byte_size));
-    memcpy(coll_data, cv->ptr, coll_byte_size);
+    MemUtil::memcpy(coll_data, cv->ptr, coll_byte_size);
     cv->ptr = coll_data;
     if (!item_desc->HasVarlenSlots()) continue;
 
@@ -113,7 +114,7 @@ void Tuple::DeepCopyVarlenData(const TupleDescriptor& desc, MemPool* pool) {
 void Tuple::DeepCopy(const TupleDescriptor& desc, char** data, int* offset,
                      bool convert_ptrs) {
   Tuple* dst = reinterpret_cast<Tuple*>(*data);
-  memcpy(dst, this, desc.byte_size());
+  MemUtil::memcpy(dst, this, desc.byte_size());
   *data += desc.byte_size();
   *offset += desc.byte_size();
   if (desc.HasVarlenSlots()) dst->DeepCopyVarlenData(desc, data, offset, convert_ptrs);
@@ -127,7 +128,7 @@ void Tuple::DeepCopyVarlenData(const TupleDescriptor& desc, char** data, int* of
     if (IsNull((*slot)->null_indicator_offset())) continue;
 
     StringValue* string_v = GetStringSlot((*slot)->tuple_offset());
-    memcpy(*data, string_v->ptr, string_v->len);
+    MemUtil::memcpy(*data, string_v->ptr, string_v->len);
     string_v->ptr = convert_ptrs ? reinterpret_cast<char*>(*offset) : *data;
     *data += string_v->len;
     *offset += string_v->len;
@@ -141,7 +142,7 @@ void Tuple::DeepCopyVarlenData(const TupleDescriptor& desc, char** data, int* of
     CollectionValue* coll_value = GetCollectionSlot((*slot)->tuple_offset());
     const TupleDescriptor& item_desc = *(*slot)->collection_item_descriptor();
     int coll_byte_size = coll_value->num_tuples * item_desc.byte_size();
-    memcpy(*data, coll_value->ptr, coll_byte_size);
+    MemUtil::memcpy(*data, coll_value->ptr, coll_byte_size);
     uint8_t* coll_data = reinterpret_cast<uint8_t*>(*data);
 
     coll_value->ptr = convert_ptrs ? reinterpret_cast<uint8_t*>(*offset) : coll_data;

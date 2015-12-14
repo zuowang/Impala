@@ -17,6 +17,7 @@
 #include "runtime/collection-value.h"
 #include "runtime/descriptors.h"
 #include "runtime/tuple-row.h"
+#include "util/mem-util.h"
 
 using namespace impala;
 
@@ -60,7 +61,7 @@ bool BufferedTupleStream::DeepCopyInternal(TupleRow* row) {
       const uint8_t mask = 1 << (7 - null_pos);
       if (t != NULL) {
         *null_word &= ~mask;
-        memcpy(write_ptr_, t, tuple_size);
+        MemUtil::memcpy(write_ptr_, t, tuple_size);
         write_ptr_ += tuple_size;
       } else {
         *null_word |= mask;
@@ -76,7 +77,7 @@ bool BufferedTupleStream::DeepCopyInternal(TupleRow* row) {
       // TODO: Once IMPALA-1306 (Avoid passing empty tuples of non-materialized slots)
       // is delivered, the check below should become DCHECK(t != NULL).
       DCHECK(t != NULL || tuple_size == 0);
-      memcpy(write_ptr_, t, tuple_size);
+      MemUtil::memcpy(write_ptr_, t, tuple_size);
       write_ptr_ += tuple_size;
     }
   }
@@ -112,7 +113,7 @@ bool BufferedTupleStream::CopyStrings(const Tuple* tuple,
     if (LIKELY(sv->len > 0)) {
       if (UNLIKELY(write_block_bytes_remaining() < sv->len)) return false;
 
-      memcpy(write_ptr_, sv->ptr, sv->len);
+      MemUtil::memcpy(write_ptr_, sv->ptr, sv->len);
       write_ptr_ += sv->len;
     }
   }
@@ -130,7 +131,7 @@ bool BufferedTupleStream::CopyCollections(const Tuple* tuple,
       int coll_byte_size = cv->num_tuples * item_desc.byte_size();
       if (UNLIKELY(write_block_bytes_remaining() < coll_byte_size)) return false;
       uint8_t* coll_data = write_ptr_;
-      memcpy(coll_data, cv->ptr, coll_byte_size);
+      MemUtil::memcpy(coll_data, cv->ptr, coll_byte_size);
       write_ptr_ += coll_byte_size;
 
       if (!item_desc.HasVarlenSlots()) continue;
