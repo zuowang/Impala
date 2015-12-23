@@ -216,6 +216,8 @@ public class Analyzer {
     // a kind of semi-join, so anti-joined tuples are also registered here.
     public final Map<TupleId, TableRef> semiJoinedTupleIds = Maps.newHashMap();
 
+    public final Map<TupleId, TableRef> innerJoinedTupleIds = Maps.newHashMap();
+
     // Map from right-hand side table-ref id of an outer join to the list of
     // conjuncts in its On clause. There is always an entry for an outer join, but the
     // corresponding value could be an empty list. There is no entry for non-outer joins.
@@ -574,6 +576,9 @@ public class Analyzer {
    */
   public void registerSemiJoinedTid(TupleId tid, TableRef rhsRef) {
     globalState_.semiJoinedTupleIds.put(tid, rhsRef);
+  }
+  public void registerInnerJoinedTid(TupleId tid, TableRef rhsRef) {
+    globalState_.innerJoinedTupleIds.put(tid, rhsRef);
   }
 
   /**
@@ -1004,6 +1009,17 @@ public class Analyzer {
 
     if (!(e instanceof BinaryPredicate)) return;
     BinaryPredicate binaryPred = (BinaryPredicate) e;
+
+    for (int i = 0; i < tupleIds.size(); ++i) {
+      ArrayList<TupleId> tids = Lists.newArrayList();
+      ArrayList<SlotId> sids = Lists.newArrayList();
+      binaryPred.getChild(i).getIds(tids, sids);
+      if (tids.size() == 1) {
+        if (globalState_.innerJoinedTupleIds.containsKey(tids.get(0))) {
+          globalState_.descTbl.markSlotsIsNotNull(sids);
+        }
+      }
+    }
 
     // check whether this is an equi-join predicate, ie, something of the
     // form <expr1> = <expr2> where at least one of the exprs is bound by

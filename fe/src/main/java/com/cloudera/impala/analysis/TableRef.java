@@ -459,6 +459,10 @@ public class TableRef implements ParseNode {
       analyzer.registerSemiJoinedTid(leftTblRef_.getId(), this);
       semiJoinedTupleId = leftTblRef_.getId();
     }
+    // register the tuple id of the lhs of a inner join
+    if (joinOp_ == JoinOperator.INNER_JOIN) {
+      analyzer.registerInnerJoinedTid(getId(), this);
+    }
 
     if (onClause_ != null) {
       Preconditions.checkState(joinOp_ != JoinOperator.CROSS_JOIN);

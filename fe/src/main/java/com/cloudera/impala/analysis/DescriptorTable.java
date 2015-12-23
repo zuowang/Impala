@@ -129,6 +129,15 @@ public class DescriptorTable {
   }
 
   /**
+   * Marks all slots in list as IS NOT NULL.
+   */
+  public void markSlotsIsNotNull(List<SlotId> ids) {
+    for (SlotId id: ids) {
+      getSlotDesc(id).setIsNullable(false);
+    }
+  }
+
+  /**
    * Return all ids in slotIds that belong to tupleId.
    */
   public List<SlotId> getTupleSlotIds(List<SlotId> slotIds, TupleId tupleId) {
