@@ -93,7 +93,8 @@ public class AnalyticPlanner {
    * (using the equivalence classes) rather than looking for expr equality
    */
   public PlanNode createSingleNodePlan(PlanNode root,
-      List<Expr> groupingExprs, List<Expr> inputPartitionExprs) throws ImpalaException {
+      List<Expr> groupingExprs, List<Expr> inputPartitionExprs, long limit)
+      throws ImpalaException {
     List<WindowGroup> windowGroups = collectWindowGroups();
     for (int i = 0; i < windowGroups.size(); ++i) {
       windowGroups.get(i).init(analyzer_, "wg-" + i);
@@ -115,7 +116,7 @@ public class AnalyticPlanner {
     for (PartitionGroup partitionGroup: partitionGroups) {
       for (int i = 0; i < partitionGroup.sortGroups.size(); ++i) {
         root = createSortGroupPlan(root, partitionGroup.sortGroups.get(i),
-            i == 0 ? partitionGroup.partitionByExprs : null);
+            i == 0 ? partitionGroup.partitionByExprs : null, limit);
       }
     }
 
@@ -319,7 +320,7 @@ public class AnalyticPlanner {
    * group of which this sort group is a part).
    */
   private PlanNode createSortGroupPlan(PlanNode root, SortGroup sortGroup,
-      List<Expr> partitionExprs) throws ImpalaException {
+      List<Expr> partitionExprs, long limit) throws ImpalaException {
     List<Expr> partitionByExprs = sortGroup.partitionByExprs;
     List<OrderByElement> orderByElements = sortGroup.orderByElements;
     ExprSubstitutionMap sortSmap = null;
@@ -346,8 +347,9 @@ public class AnalyticPlanner {
         nullsFirst.add(orderByElement.getNullsFirstParam());
       }
 
+      boolean useTopN = limit != -1;
       SortInfo sortInfo = createSortInfo(root, sortExprs, isAsc, nullsFirst);
-      SortNode sortNode = new SortNode(ctx_.getNextNodeId(), root, sortInfo, false, 0);
+      SortNode sortNode = new SortNode(ctx_.getNextNodeId(), root, sortInfo, useTopN, 0);
 
       // if this sort group does not have partitioning exprs, we want the sort
       // to be executed like a regular distributed sort
@@ -364,6 +366,7 @@ public class AnalyticPlanner {
       }
 
       root = sortNode;
+      root.setLimit(limit);
       root.init(analyzer_);
       sortSmap = sortNode.getOutputSmap();
 

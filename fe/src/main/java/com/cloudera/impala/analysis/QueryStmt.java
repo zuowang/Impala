@@ -448,4 +448,9 @@ public abstract class QueryStmt extends StatementBase {
 
   @Override
   public abstract QueryStmt clone();
+
+  public void setLimit(Expr limitExpr, Analyzer analyzer) throws AnalysisException {
+    limitElement_ = new LimitElement(limitExpr, null);
+    analyzeLimit(analyzer);
+  }
 }

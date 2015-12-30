@@ -27,6 +27,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.cloudera.impala.analysis.AggregateInfo;
+import com.cloudera.impala.analysis.AnalyticExpr;
 import com.cloudera.impala.analysis.AnalyticInfo;
 import com.cloudera.impala.analysis.Analyzer;
 import com.cloudera.impala.analysis.BaseTableRef;
@@ -35,6 +36,7 @@ import com.cloudera.impala.analysis.CollectionTableRef;
 import com.cloudera.impala.analysis.Expr;
 import com.cloudera.impala.analysis.ExprId;
 import com.cloudera.impala.analysis.ExprSubstitutionMap;
+import com.cloudera.impala.analysis.FunctionCallExpr;
 import com.cloudera.impala.analysis.InlineViewRef;
 import com.cloudera.impala.analysis.JoinOperator;
 import com.cloudera.impala.analysis.QueryStmt;
@@ -235,8 +237,9 @@ public class SingleNodePlanner {
             new AnalyticPlanner(analyticInfo, analyzer, ctx_);
         List<Expr> inputPartitionExprs = Lists.newArrayList();
         AggregateInfo aggInfo = selectStmt.getAggInfo();
-        root = analyticPlanner.createSingleNodePlan(root,
-            aggInfo != null ? aggInfo.getGroupingExprs() : null, inputPartitionExprs);
+        root = analyticPlanner.createSingleNodePlan(
+            root, aggInfo != null ? aggInfo.getGroupingExprs() : null,
+            inputPartitionExprs, stmt.getLimit());
         if (aggInfo != null && !inputPartitionExprs.isEmpty()) {
           // analytic computation will benefit from a partition on inputPartitionExprs
           aggInfo.setPartitionExprs(inputPartitionExprs);
@@ -1136,6 +1139,16 @@ public class SingleNodePlanner {
       InlineViewRef inlineViewRef) throws ImpalaException {
     List<Expr> unassignedConjuncts =
         analyzer.getUnassignedConjuncts(inlineViewRef.getId().asList(), true);
+    if (unassignedConjuncts.size() == 1) {
+      Expr substUnassignedConjunct = unassignedConjuncts.get(0).trySubstitute(
+          inlineViewRef.getBaseTblSmap(), analyzer, false);
+      Expr limitExpr = filterOnRankToLimit(substUnassignedConjunct);
+      if (limitExpr != null) {
+        inlineViewRef.getViewStmt().setLimit(limitExpr, inlineViewRef.getAnalyzer());
+        return;
+      }
+    }
+
     if (!canMigrateConjuncts(inlineViewRef)) {
       // mark (fully resolve) slots referenced by unassigned conjuncts as
       // materialized
@@ -1559,5 +1572,25 @@ public class SingleNodePlanner {
           analyzer, unionStmt.getTupleId().asList(), result);
     }
     return result;
+  }
+
+  Expr filterOnRankToLimit(Expr conjunct) {
+    if (conjunct instanceof BinaryPredicate) {
+      BinaryPredicate binaryPred = (BinaryPredicate) conjunct;
+      Expr lhsExpr = binaryPred.getChild(0);
+      if (binaryPred.getOp() == BinaryPredicate.Operator.LT &&
+          (lhsExpr instanceof SlotRef)) {
+        List<Expr> sourceExprs = ((SlotRef) lhsExpr).getDesc().getSourceExprs();
+        if (sourceExprs.size() == 1 && (sourceExprs.get(0) instanceof AnalyticExpr)) {
+          FunctionCallExpr fnCallExpr = ((AnalyticExpr) sourceExprs.get(0)).getFnCall();
+          if (fnCallExpr.getFnName().getFunction().equals("rank") ||
+              fnCallExpr.getFnName().getFunction().equals("dense_rank") ||
+              fnCallExpr.getFnName().getFunction().equals("percent_rank")) {
+            return binaryPred.getChild(1);
+          }
+        }
+      }
+    }
+    return null;
   }
 }
