@@ -42,6 +42,8 @@ class SpinLock {
 
   void DCheckLocked() { DCHECK(locked_); }
 
+  inline bool is_locked() { return locked_; }
+
  private:
 
   /// Out-of-line definition of the actual spin loop. The primary goal is to have the

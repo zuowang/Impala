@@ -22,6 +22,7 @@
 #include "util/benchmark.h"
 #include "util/cpu-info.h"
 #include "util/spinlock.h"
+#include "util/rtm.h"
 
 #include "common/names.h"
 
@@ -113,6 +114,33 @@ void SpinLockProduceThread(int64_t n, int64_t* value) {
   }
 }
 
+void RTMConsumeThread(int64_t n, int64_t* value) {
+  for (int64_t i = 0; i < n; ++i) {
+    int status;
+    if ((status = _xbegin()) == _XBEGIN_STARTED) {
+      --(*value);
+      if (spinlock_.is_locked()) _xabort(1);
+      _xend();
+    } else {
+      lock_guard<SpinLock> l(spinlock_);
+      --(*value);
+    }
+  }
+}
+void RTMProduceThread(int64_t n, int64_t* value) {
+  for (int64_t i = 0; i < n; ++i) {
+    int status;
+    if ((status = _xbegin()) == _XBEGIN_STARTED) {
+      ++(*value);
+      if (spinlock_.is_locked()) _xabort(1);
+      _xend();
+    } else {
+      lock_guard<SpinLock> l(spinlock_);
+      ++(*value);
+    }
+  }
+}
+
 void BoostConsumeThread(int64_t n, int64_t* value) {
   for (int64_t i = 0; i < n; ++i) {
     lock_guard<mutex> l(lock_);
@@ -162,6 +190,12 @@ void TestSpinLock(int batch_size, void* d) {
   CHECK_EQ(data->value, 0);
 }
 
+void TestRTM(int batch_size, void* d) {
+  TestData* data = reinterpret_cast<TestData*>(d);
+  LaunchThreads(d, RTMConsumeThread, RTMProduceThread, batch_size);
+  CHECK_EQ(data->value, 0);
+}
+
 void TestBoost(int batch_size, void* d) {
   TestData* data = reinterpret_cast<TestData*>(d);
   LaunchThreads(d, BoostConsumeThread, BoostProduceThread, batch_size);
@@ -198,6 +232,10 @@ int main(int argc, char **argv) {
     name.str("");
     name << "SpinLock" << suffix.str();
     suite.AddBenchmark(name.str(), TestSpinLock, &data[i], baseline);
+
+    name.str("");
+    name << "SpinLock" << suffix.str();
+    suite.AddBenchmark(name.str(), TestRTM, &data[i], baseline);
 
     name.str("");
     name << "Boost" << suffix.str();
