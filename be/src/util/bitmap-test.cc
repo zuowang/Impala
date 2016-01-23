@@ -92,16 +92,31 @@ TEST(Bitmap, SetGetTest) {
   bm.SetAllBits(false);
   // Go over different words (1, 2, 4, 8) and set the same index alternatively
   // to 0 and 1.
-  for (int64_t bit_idx = 0; bit_idx < 63; ++bit_idx) {
+  for (int64_t bit_idx = 0; bit_idx < 64; ++bit_idx) {
     for (int64_t i = 0; i < 4; ++i) {
       bm.Set<false>((1 << (6 + i)) + bit_idx, (i + bit_idx) % 2 == 0);
     }
   }
-  for (int64_t bit_idx = 0; bit_idx < 63; ++bit_idx) {
+  for (int64_t bit_idx = 0; bit_idx < 64; ++bit_idx) {
     for (int64_t i = 0; i < 4; ++i) {
       EXPECT_EQ(bm.Get<false>((1 << (6 + i)) + bit_idx), (i + bit_idx) % 2 == 0);
     }
   }
+//  for (uint32_t bit_idx = 0; bit_idx < 64; ++bit_idx) {
+//    uint32_t bit_index[] = {(1 << 6) + bit_idx, (1 << 7) + bit_idx,
+//        (1 << 8) + bit_idx, (1 << 9) + bit_idx,
+//        (1 << 6) + bit_idx + 1, (1 << 7) + bit_idx + 1,
+//        (1 << 8) + bit_idx + 1, (1 << 9) + bit_idx + 1};
+//    uint32_t result[] = {0, 0, 0, 0, 0, 0, 0, 0};
+//    bm.Get<false>(bit_index, result);
+//    for (int64_t i = 0; i < 4; ++i) {
+//      EXPECT_EQ(result[i] != 0, (i + bit_idx) % 2 == 0);
+//    }
+//    ++bit_idx;
+//    for (int64_t i = 0; i < 4; ++i) {
+//      EXPECT_EQ(result[4 + i] != 0, (i + bit_idx) % 2 == 0);
+//    }
+//  }
 }
 
 TEST(Bitmap, SetGetModTest) {
@@ -121,6 +136,15 @@ TEST(Bitmap, SetGetModTest) {
   }
   for (int64_t bit_idx = 0; bit_idx < 1024; ++bit_idx) {
     EXPECT_EQ(bm.Get<true>(bit_idx), bit_idx % 2 == 0);
+  }
+  for (uint32_t bit_idx = 0; bit_idx < 1024; bit_idx += 8) {
+    uint32_t bit_index[] = {bit_idx, bit_idx + 1, bit_idx + 2, bit_idx + 3,
+        bit_idx + 4, bit_idx + 5, bit_idx + 6, bit_idx + 7};
+    uint32_t result[] = {0, 0, 0, 0, 0, 0, 0, 0};
+    bm.Get<true>(bit_index, result);
+    for (int64_t i = 0; i < 8; ++i) {
+      EXPECT_EQ(result[i] != 0, (i + bit_idx) % 2 == 0);
+    }
   }
 }
 

@@ -20,6 +20,10 @@
 
 using namespace impala;
 
+//const __m256i Bitmap::m_one = _mm256_set1_epi64x(1LL);
+//const __m256i Bitmap::m_bit_mask = _mm256_set1_epi32(Bitmap::BIT_INDEX_MASK);
+
+
 string Bitmap::DebugString(bool print_bits) {
   int64_t words = BitUtil::RoundUp(num_bits_, 64) / 64;
   stringstream ss;
