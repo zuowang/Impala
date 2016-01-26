@@ -27,14 +27,14 @@
 namespace impala {
 
 void CreateRandomBitmap(Bitmap* bitmap) {
-  for (int64_t i = 0; i < bitmap->num_bits(); ++i) {
+  for (uint32_t i = 0; i < bitmap->num_bits(); ++i) {
     bitmap->Set<false>(i, rand() % 2 == 0);
   }
 }
 
 // Returns true if all the bits in the bitmap are equal to 'value'.
 bool CheckAll(const Bitmap& bitmap, const bool value) {
-  for (int64_t i = 0; i < bitmap.num_bits(); ++i) {
+  for (uint32_t i = 0; i < bitmap.num_bits(); ++i) {
     if (bitmap.Get<false>(i) != value) return false;
   }
   return true;
@@ -92,13 +92,13 @@ TEST(Bitmap, SetGetTest) {
   bm.SetAllBits(false);
   // Go over different words (1, 2, 4, 8) and set the same index alternatively
   // to 0 and 1.
-  for (int64_t bit_idx = 0; bit_idx < 63; ++bit_idx) {
-    for (int64_t i = 0; i < 4; ++i) {
+  for (uint32_t bit_idx = 0; bit_idx < 63; ++bit_idx) {
+    for (uint32_t i = 0; i < 4; ++i) {
       bm.Set<false>((1 << (6 + i)) + bit_idx, (i + bit_idx) % 2 == 0);
     }
   }
-  for (int64_t bit_idx = 0; bit_idx < 63; ++bit_idx) {
-    for (int64_t i = 0; i < 4; ++i) {
+  for (uint32_t bit_idx = 0; bit_idx < 63; ++bit_idx) {
+    for (uint32_t i = 0; i < 4; ++i) {
       EXPECT_EQ(bm.Get<false>((1 << (6 + i)) + bit_idx), (i + bit_idx) % 2 == 0);
     }
   }
@@ -107,7 +107,7 @@ TEST(Bitmap, SetGetTest) {
 TEST(Bitmap, SetGetModTest) {
   Bitmap bm(256);
   bm.SetAllBits(false);
-  for (int64_t bit_idx = 0; bit_idx < 1024; ++bit_idx) {
+  for (uint32_t bit_idx = 0; bit_idx < 1024; ++bit_idx) {
     bm.Set<true>(bit_idx, true);
     EXPECT_TRUE(bm.Get<true>(bit_idx));
     bm.Set<true>(bit_idx, false);
@@ -116,10 +116,10 @@ TEST(Bitmap, SetGetModTest) {
 
   bm.SetAllBits(false);
   EXPECT_TRUE(CheckAll(bm, false));
-  for (int64_t bit_idx = 0; bit_idx < 1024; ++bit_idx) {
+  for (uint32_t bit_idx = 0; bit_idx < 1024; ++bit_idx) {
     bm.Set<true>(bit_idx, bit_idx % 2 == 0);
   }
-  for (int64_t bit_idx = 0; bit_idx < 1024; ++bit_idx) {
+  for (uint32_t bit_idx = 0; bit_idx < 1024; ++bit_idx) {
     EXPECT_EQ(bm.Get<true>(bit_idx), bit_idx % 2 == 0);
   }
 }
@@ -128,8 +128,8 @@ TEST(Bitmap, SetGetModTest) {
 TEST(Bitmap, OverflowTest) {
   Bitmap bm(64);
   bm.SetAllBits(false);
-  int64_t bit_idx = 45;
-  int64_t ovr_idx = 13;
+  uint32_t bit_idx = 45;
+  uint32_t ovr_idx = 13;
 
   bm.Set<false>(bit_idx, true);
   EXPECT_FALSE(bm.Get<false>(ovr_idx));

@@ -25,7 +25,7 @@ string Bitmap::DebugString(bool print_bits) {
   stringstream ss;
   ss << "Size (" << num_bits_ << ") words (" << words << ") ";
   if (print_bits) {
-    for (int i = 0; i < num_bits(); ++i) {
+    for (uint32_t i = 0; i < num_bits(); ++i) {
       if (Get<false>(i)) {
         ss << "1";
       } else {
