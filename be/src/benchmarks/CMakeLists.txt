@@ -33,7 +33,11 @@ ADD_BE_BENCHMARK(string-compare-benchmark)
 ADD_BE_BENCHMARK(multiint-benchmark)
 ADD_BE_BENCHMARK(status-benchmark)
 ADD_BE_BENCHMARK(row-batch-serialize-benchmark)
-ADD_BE_BENCHMARK(overflow-benchmark)
+
+enable_language(ASM)
+set_source_files_properties(int128-op-overflow.s PROPERTIES COMPILE_FLAGS "-x assembler-with-cpp")
+add_executable(overflow-benchmark int128-op-overflow.s overflow-benchmark.cc)
+target_link_libraries(overflow-benchmark ${IMPALA_LINK_LIBS})
 
 add_executable(hash-benchmark hash-benchmark.cc)
 target_link_libraries(hash-benchmark Experiments ${IMPALA_LINK_LIBS})

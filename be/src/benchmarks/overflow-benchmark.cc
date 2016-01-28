@@ -21,9 +21,15 @@
 #include "runtime/string-value.h"
 #include "util/benchmark.h"
 #include "util/cpu-info.h"
+#include "util/int128-op-overflow.h"
 #include "util/string-parser.h"
 
 #include "common/names.h"
+
+#if __GNUC__ < 5
+#define __builtin_mul_overflow int128_mul_overflow
+#define __builtin_add_overflow int128_add_overflow
+#endif
 
 #ifndef __has_builtin
 #define __has_builtin(x) 0
@@ -142,7 +148,7 @@ static bool AdjustToSameScaleLookupTbl(const Decimal16Value& x, int x_scale,
   return false;
 }
 
-#if 5 <= __GNUC__ || __has_builtin(__builtin_add_overflow)
+//#if 5 <= __GNUC__ || __has_builtin(__builtin_add_overflow)
 template<typename RESULT_T>
 DecimalValue<RESULT_T> BuiltinAdd(const Decimal16Value& val, int this_scale,
     const Decimal16Value& other, int other_scale, int result_precision, int result_scale,
@@ -162,7 +168,7 @@ DecimalValue<RESULT_T> BuiltinAdd(const Decimal16Value& val, int this_scale,
   }
   return DecimalValue<RESULT_T>(x + y);
 }
-#endif
+//#endif
 
 template<typename RESULT_T>
 DecimalValue<RESULT_T> AddLookupTbl(const Decimal16Value& val, int this_scale,
@@ -239,13 +245,13 @@ DecimalValue<RESULT_T> Add(const Decimal16Value& val, int this_scale,
   }
 
 TEST_ADD(TestAdd, Add, true);
-#if 5 <= __GNUC__ || __has_builtin (__builtin_add_overflow)
+//#if 5 <= __GNUC__ || __has_builtin (__builtin_add_overflow)
 TEST_ADD(TestBuiltinAddOverflow, BuiltinAdd, false);
-#endif
+//#endif
 TEST_ADD(TestAddOverflowLookupTbl, AddLookupTbl, false);
 TEST_ADD(TestAddOverflow, Add, false);
 
-#if 5 <= __GNUC__ || __has_builtin(__builtin_mul_overflow)
+//#if 5 <= __GNUC__ || __has_builtin(__builtin_mul_overflow)
 template<typename RESULT_T>
 DecimalValue<RESULT_T> BuiltinMultiply(const Decimal16Value& val, int this_scale,
     const Decimal16Value& other, int other_scale, int result_precision, int result_scale,
@@ -279,7 +285,7 @@ DecimalValue<RESULT_T> BuiltinMultiply(const Decimal16Value& val, int this_scale
   }
   return DecimalValue<RESULT_T>(result);
 }
-#endif
+//#endif
 
 // Check MSB of decimal values to skip checking overflow.
 template<typename RESULT_T>
@@ -369,9 +375,9 @@ DecimalValue<RESULT_T> Multiply(const Decimal16Value& val, int this_scale,
   }
 
 TEST_MUL(TestMul, Multiply, true);
-#if 5 <= __GNUC__ || __has_builtin (__builtin_mul_overflow)
+//#if 5 <= __GNUC__ || __has_builtin (__builtin_mul_overflow)
 TEST_MUL(TestBuiltinMulOverflow, BuiltinMultiply, false);
-#endif
+//#endif
 TEST_MUL(TestMulOverflowCheckMSB, MultiplyCheckMSB, false);
 TEST_MUL(TestMulOverflow, Multiply, false);
 
@@ -438,9 +444,9 @@ int main(int argc, char** argv) {
 
   Benchmark add_overflow_suite("Decimal16 Add Overflow");
   add_overflow_suite.AddBenchmark("without_check_overflow", TestAdd, &data);
-#if 5 <= __GNUC__ || __has_builtin (__builtin_mul_overflow)
+//#if 5 <= __GNUC__ || __has_builtin (__builtin_mul_overflow)
   add_overflow_suite.AddBenchmark("builtin_add_overflow", TestBuiltinAddOverflow, &data);
-#endif
+//#endif
   add_overflow_suite.AddBenchmark("add_overflow_lookup_table",
       TestAddOverflowLookupTbl, &data);
   add_overflow_suite.AddBenchmark("add_overflow", TestAddOverflow, &data);
@@ -448,9 +454,9 @@ int main(int argc, char** argv) {
 
   Benchmark mul_overflow_suite("Decimal16 Mul Overflow");
   mul_overflow_suite.AddBenchmark("without_check_overflow", TestMul, &data);
-#if 5 <= __GNUC__ || __has_builtin (__builtin_mul_overflow)
+//#if 5 <= __GNUC__ || __has_builtin (__builtin_mul_overflow)
   mul_overflow_suite.AddBenchmark("builtin_mul_overflow", TestBuiltinMulOverflow, &data);
-#endif
+//#endif
   mul_overflow_suite.AddBenchmark("mul_overflow_check_msb",
       TestMulOverflowCheckMSB, &data);
   mul_overflow_suite.AddBenchmark("mul_overflow", TestMulOverflow, &data);

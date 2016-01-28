@@ -25,6 +25,12 @@
 #include "runtime/multi-precision.h"
 #include "util/decimal-util.h"
 #include "util/hash-util.h"
+#include "util/int128-op-overflow.h"
+
+#if __GNUC__ < 5
+#define __builtin_mul_overflow int128_mul_overflow
+#define __builtin_add_overflow int128_add_overflow
+#endif
 
 #ifndef __has_builtin
 #define __has_builtin(x) 0
@@ -168,27 +174,6 @@ class DecimalValue {
         result_scale, overflow);
   }
 
-#if 5 <= __GNUC__ || __has_builtin(__builtin_add_overflow)
-  template<typename RESULT_T>
-  DecimalValue<RESULT_T> Add(int this_scale, const DecimalValue& other, int other_scale,
-      int result_precision, int result_scale, bool* overflow) const {
-    DCHECK_EQ(result_scale, std::max(this_scale, other_scale));
-    RESULT_T x = 0;
-    RESULT_T y = 0;
-    *overflow |= AdjustToSameScale(*this, this_scale, other, other_scale,
-        result_precision, &x, &y);
-    if (result_precision == ColumnType::MAX_PRECISION) {
-      DCHECK_EQ(sizeof(RESULT_T), 16);
-      RESULT_T result = 0;
-      *overflow |= __builtin_add_overflow(x, y, &result);
-      *overflow |= abs(result) > DecimalUtil::MAX_UNSCALED_DECIMAL;
-      return DecimalValue<RESULT_T>(result);
-    } else {
-      DCHECK(!*overflow) << "Cannot overflow unless result is Decimal16Value";
-    }
-    return DecimalValue<RESULT_T>(x + y);
-  }
-#else
   template<typename RESULT_T>
   DecimalValue<RESULT_T> Add(int this_scale, const DecimalValue& other, int other_scale,
       int result_precision, int result_scale, bool* overflow) const {
@@ -212,7 +197,6 @@ class DecimalValue {
     }
     return DecimalValue<RESULT_T>(x + y);
   }
-#endif
 
   template<typename RESULT_T>
   DecimalValue<RESULT_T> Subtract(const ColumnType& this_type, const DecimalValue& other,
@@ -237,7 +221,6 @@ class DecimalValue {
         result_scale, overflow);
   }
 
-#if 5 <= __GNUC__ || __has_builtin(__builtin_mul_overflow)
   template<typename RESULT_T>
   DecimalValue<RESULT_T> Multiply(int this_scale, const DecimalValue& other,
       int other_scale, int result_precision, int result_scale, bool* overflow) const {
@@ -271,38 +254,6 @@ class DecimalValue {
     }
     return DecimalValue<RESULT_T>(result);
   }
-#else
-  template<typename RESULT_T>
-  DecimalValue<RESULT_T> Multiply(int this_scale, const DecimalValue& other,
-      int other_scale, int result_precision, int result_scale, bool* overflow) const {
-    // In the non-overflow case, we don't need to adjust by the scale since
-    // that is already handled by the FE when it computes the result decimal type.
-    // e.g. 1.23 * .2 (scale 2, scale 1 respectively) is identical to:
-    // 123 * 2 with a resulting scale 3. We can do the multiply on the unscaled values.
-    // The result scale in this case is the sum of the input scales.
-    RESULT_T x = value();
-    RESULT_T y = other.value();
-    if (x == 0 || y == 0) {
-      // Handle zero to avoid divide by zero in the overflow check below.
-      return DecimalValue<RESULT_T>(0);
-    }
-    if (result_precision == ColumnType::MAX_PRECISION) {
-      DCHECK_EQ(sizeof(RESULT_T), 16);
-      // Check overflow
-      *overflow |= DecimalUtil::MAX_UNSCALED_DECIMAL / abs(y) < abs(x);
-    }
-    RESULT_T result = x * y;
-    int delta_scale = this_scale + other_scale - result_scale;
-    if (UNLIKELY(delta_scale != 0)) {
-      // In this case, the required resulting scale is larger than the max we support.
-      // We cap the resulting scale to the max supported scale (e.g. truncate) in the FE.
-      // TODO: we could also return NULL.
-      DCHECK_GT(delta_scale, 0);
-      result /= DecimalUtil::GetScaleMultiplier<T>(delta_scale);
-    }
-    return DecimalValue<RESULT_T>(result);
-  }
-#endif
 
   /// is_nan is set to true if 'other' is 0. The value returned is undefined.
   template<typename RESULT_T>
