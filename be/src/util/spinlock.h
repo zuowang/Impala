@@ -27,14 +27,24 @@ class SpinLock {
 
   /// Acquires the lock, spins until the lock becomes available
   void lock() {
-    if (!try_lock()) SlowAcquire();
+    int32_t count = 1;
+    while (!try_lock()) {
+      if (count <= NUM_SPIN_CYCLES) {
+        for (int32_t i = 0; i < count; i++) AtomicUtil::CpuWait();
+        count *= 2;
+      } else {
+        sched_yield();
+      }
+    }
   }
 
   void unlock() {
     // Memory barrier here. All updates before the unlock need to be made visible.
-    __sync_synchronize();
+//    __sync_synchronize();
+    volatile bool& location = locked_;
+    asm volatile("" ::: "memory");
     DCHECK(locked_);
-    locked_ = false;
+    location = false;
   }
 
   /// Tries to acquire the lock
