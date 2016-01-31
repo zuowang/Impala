@@ -790,9 +790,17 @@ void SimpleScheduler::GetScanHosts(TPlanNodeId scan_id,
   }
 
   // Get the list of impalad host from scan_range_assignment_
+  //BOOST_FOREACH(const FragmentScanRangeAssignment::value_type& scan_range_assignment,
+  //    params.scan_range_assignment) {
+  //  scan_hosts->push_back(scan_range_assignment.first);
+  //}
   BOOST_FOREACH(const FragmentScanRangeAssignment::value_type& scan_range_assignment,
       params.scan_range_assignment) {
-    scan_hosts->push_back(scan_range_assignment.first);
+    BOOST_FOREACH(const PerNodeScanRanges::value_type& per_node_scan_ranges,
+        scan_range_assignment.second) {
+      int num_instance = per_node_scan_ranges.second.size();
+      scan_hosts->insert(scan_hosts->end(), num_instance, scan_range_assignment.first);
+    }
   }
 }
 

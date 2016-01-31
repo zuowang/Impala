@@ -1616,8 +1616,34 @@ void Coordinator::SetExecPlanFragmentParams(
   FragmentScanRangeAssignment::const_iterator it =
       params.scan_range_assignment.find(exec_host);
   // Scan ranges may not always be set, so use an empty structure if so.
-  const PerNodeScanRanges& scan_ranges =
-      (it != params.scan_range_assignment.end()) ? it->second : PerNodeScanRanges();
+  int nth_instance = 0;
+  for (int idx = 0; idx < instance_idx; ++idx) {
+    if (params.hosts[idx] == exec_host) ++nth_instance;
+  }
+  PerNodeScanRanges scan_ranges;
+  if (it != params.scan_range_assignment.end()) {
+    BOOST_FOREACH(const PerNodeScanRanges::value_type& per_node_scan_ranges, it->second) {
+      if (nth_instance >= per_node_scan_ranges.second.size()) {
+        nth_instance -= per_node_scan_ranges.second.size();
+        continue;
+      }
+      vector<TScanRangeParams>* scan_range_params_list = FindOrInsert(&scan_ranges,
+          per_node_scan_ranges.first, vector<TScanRangeParams>());
+      const TScanRangeParams& item = per_node_scan_ranges.second[nth_instance];
+      // add scan range
+      TScanRangeParams scan_range_params;
+      scan_range_params.scan_range = item.scan_range;
+      // Explicitly set the optional fields.
+      scan_range_params.__set_volume_id(item.volume_id);
+      scan_range_params.__set_is_cached(item.is_cached);
+      scan_range_params.__set_is_remote(item.is_remote);
+      scan_range_params_list->push_back(scan_range_params);
+      break;
+    }
+  }
+
+  //const PerNodeScanRanges& scan_ranges =
+  //    (it != params.scan_range_assignment.end()) ? it->second : PerNodeScanRanges();
 
   rpc_params->params.__set_per_node_scan_ranges(scan_ranges);
   rpc_params->params.__set_per_exch_num_senders(params.per_exch_num_senders);
