@@ -1298,7 +1298,7 @@ inline int16_t HdfsParquetScanner::BaseScalarColumnReader::ReadRepetitionLevel()
 }
 
 template <bool ADVANCE_REP_LEVEL>
-bool HdfsParquetScanner::BaseScalarColumnReader::NextLevels() {
+inline bool HdfsParquetScanner::BaseScalarColumnReader::NextLevels() {
   if (!ADVANCE_REP_LEVEL) DCHECK_EQ(max_rep_level(), 0) << slot_desc()->DebugString();
 
   if (UNLIKELY(num_buffered_values_ == 0)) {
@@ -1696,7 +1696,8 @@ inline bool HdfsParquetScanner::ReadRow(const vector<ColumnReader*>& column_read
   DCHECK(!column_readers.empty());
   bool continue_execution = true;
   bool conjuncts_passed = true;
-  for (int c = 0; c < column_readers.size(); ++c) {
+  int column_readers_size = column_readers.size();
+  for (int c = 0; c < column_readers_size; ++c) {
     ColumnReader* col_reader = column_readers[c];
     if (!IN_COLLECTION) {
       DCHECK(*materialize_tuple);

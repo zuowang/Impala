@@ -208,6 +208,7 @@ class DictDecoder : public DictDecoderBase {
 
  private:
   std::vector<T> dict_;
+  uint32_t dict_size_;
 };
 
 template<typename T>
@@ -267,10 +268,10 @@ inline int DictEncoder<StringValue>::AddToTable(const StringValue& value,
 
 template<typename T>
 inline bool DictDecoder<T>::GetValue(T* value) {
-  int index = -1; // Initialize to avoid compiler warning.
-  bool result = data_decoder_.Get(&index);
+  unsigned int index = std::numeric_limits<unsigned int>::max();
+  data_decoder_.QuickGet(&index);
   // Use & to avoid branches.
-  if (LIKELY(result & (index >= 0) & (index < dict_.size()))) {
+  if (LIKELY(index < dict_size_)) {
     *value = dict_[index];
     return true;
   }
@@ -279,10 +280,9 @@ inline bool DictDecoder<T>::GetValue(T* value) {
 
 template<>
 inline bool DictDecoder<Decimal16Value>::GetValue(Decimal16Value* value) {
-  int index;
-  bool result = data_decoder_.Get(&index);
-  if (!result) return false;
-  if (index >= dict_.size()) return false;
+  unsigned int index = std::numeric_limits<unsigned int>::max();
+  data_decoder_.QuickGet(&index);
+  if (index >= dict_size_) return false;
   // Workaround for IMPALA-959. Use memcpy instead of '=' so addresses
   // do not need to be 16 byte aligned.
   uint8_t* addr = reinterpret_cast<uint8_t*>(&dict_[0]);
@@ -329,6 +329,7 @@ inline void DictDecoder<T>::Reset(uint8_t* dict_buffer, int dict_len,
         ParquetPlainEncoder::Decode(dict_buffer, fixed_len_size, &value);
     dict_.push_back(value);
   }
+  dict_size_ = dict_.size();
 }
 
 }

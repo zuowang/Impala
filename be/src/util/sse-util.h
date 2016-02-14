@@ -120,6 +120,18 @@ static inline int64_t POPCNT_popcnt_u64(uint64_t a) {
   return result;
 }
 
+static inline uint64_t BMI_bextr_u64(uint64_t src, uint64_t start_bit, uint64_t bit_len) {
+  uint64_t result;
+  __asm__("bextr %2, %1, %0" : "=r"(result) : "rm"(src), "r"(start_bit | (bit_len) << 8));
+  return result;
+}
+
+static inline uint64_t BMI_bextr_u64(uint64_t src, uint64_t bit_len) {
+  uint64_t result;
+  __asm__("bextr %2, %1, %0" : "=r"(result) : "rm"(src), "r"(bit_len << 8));
+  return result;
+}
+
 #undef SSE_ALWAYS_INLINE
 
 #elif defined(__SSE4_2__) // IR_COMPILE for SSE 4.2.

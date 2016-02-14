@@ -104,6 +104,11 @@ class RleDecoder {
   template<typename T>
   bool Get(T* val);
 
+  /// Gets the next value. Set val = InvalidValue before call to this function.
+  /// val remains InvalidValue if there are no more.
+  template<typename T>
+  void QuickGet(T* val);
+
  protected:
   BitReader bit_reader_;
   /// Number of bits needed to encode the value. Must be between 0 and 64.
@@ -259,6 +264,23 @@ inline bool RleDecoder::Get(T* val) {
   }
 
   return true;
+}
+
+template<typename T>
+inline void RleDecoder::QuickGet(T* val) {
+  DCHECK_GE(bit_width_, 0);
+  if (UNLIKELY(literal_count_ == 0 && repeat_count_ == 0)) {
+    if (!NextCounts<T>()) return;
+  }
+
+  if (LIKELY(repeat_count_ > 0)) {
+    *val = current_value_;
+    --repeat_count_;
+  } else {
+    DCHECK_GT(literal_count_, 0);
+    bit_reader_.QuickGetValue(bit_width_, val);
+    --literal_count_;
+  }
 }
 
 template<typename T>

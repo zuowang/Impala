@@ -99,6 +99,7 @@ class BitReader {
       bit_offset_(0) {
     int num_bytes = std::min(8, max_bytes_ - byte_offset_);
     memcpy(&buffered_values_, buffer_ + byte_offset_, num_bytes);
+    bytes_end_ = buffer_len - buffer_len % 8;
   }
 
   BitReader() : buffer_(NULL), max_bytes_(0) {}
@@ -108,12 +109,16 @@ class BitReader {
     max_bytes_ = buffer_len;
     byte_offset_ = 0;
     bit_offset_ = 0;
+    bytes_end_ = buffer_len - buffer_len % 8;
   }
 
   /// Gets the next value from the buffer.  Returns true if 'v' could be read or false if
   /// there are not enough bytes left. num_bits must be <= 32.
   template<typename T>
   bool GetValue(int num_bits, T* v);
+
+  template<typename T>
+  void QuickGetValue(int num_bits, T* v);
 
   /// Reads a 'num_bytes'-sized value from the buffer and stores it in 'v'. T needs to be a
   /// little-endian native type and big enough to store 'num_bytes'. The value is assumed
@@ -143,6 +148,8 @@ class BitReader {
 
   int byte_offset_;       // Offset in buffer_
   int bit_offset_;        // Offset in buffered_values_
+
+  int bytes_end_;
 };
 
 }

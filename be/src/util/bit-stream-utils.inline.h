@@ -113,6 +113,31 @@ inline bool BitReader::GetValue(int num_bits, T* v) {
 }
 
 template<typename T>
+inline void BitReader::QuickGetValue(int num_bits, T* v) {
+  DCHECK(buffer_ != NULL);
+  // TODO: revisit this limit if necessary
+  DCHECK_LE(num_bits, 32);
+  DCHECK_LE(num_bits, sizeof(T) * 8);
+  DCHECK_LE(byte_offset_ * 8 + bit_offset_ + num_bits, max_bytes_ * 8);
+
+  *v = BMI_bextr_u64(buffered_values_, bit_offset_, num_bits);
+  bit_offset_ += num_bits;
+  if (bit_offset_ >= 64) {
+    byte_offset_ += 8;
+    bit_offset_ -= 64;
+
+    if (LIKELY(byte_offset_ < bytes_end_)) {
+      memcpy(&buffered_values_, buffer_ + byte_offset_, 8);
+    } else {
+      memcpy(&buffered_values_, buffer_ + byte_offset_, max_bytes_ - byte_offset_);
+    }
+
+    *v |= BMI_bextr_u64(buffered_values_, bit_offset_) << (num_bits - bit_offset_);
+  }
+  DCHECK_LE(bit_offset_, 64);
+}
+
+template<typename T>
 inline bool BitReader::GetAligned(int num_bytes, T* v) {
   DCHECK_LE(num_bytes, sizeof(T));
   int bytes_read = BitUtil::Ceil(bit_offset_, 8);
