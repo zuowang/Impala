@@ -120,6 +120,24 @@ static inline int64_t POPCNT_popcnt_u64(uint64_t a) {
   return result;
 }
 
+static inline uint64_t BMI_bextr_u64(uint64_t src, uint64_t start_bit, uint64_t bit_len) {
+  uint64_t result;
+  __asm__("bextr %2, %1, %0" : "=r"(result) : "rm"(src), "r"(start_bit | (bit_len) << 8));
+  return result;
+}
+
+static inline uint64_t BMI_bextr_u64(uint64_t src, uint64_t bit_len) {
+  uint64_t result;
+  __asm__("bextr %2, %1, %0" : "=r"(result) : "rm"(src), "r"(bit_len << 8));
+  return result;
+}
+
+static inline uint64_t BMI2_pdep_u64(uint64_t src, uint64_t mask) {
+  uint64_t result;
+  __asm__("pdep %2, %1, %0" : "=r"(result) : "r"(src), "rm"(mask));
+  return result;
+}
+
 #undef SSE_ALWAYS_INLINE
 
 #elif defined(__SSE4_2__) // IR_COMPILE for SSE 4.2.
@@ -145,6 +163,16 @@ static inline int SSE4_cmpestri(
 #define SSE4_crc32_u8 _mm_crc32_u8
 #define SSE4_crc32_u32 _mm_crc32_u32
 #define POPCNT_popcnt_u64 _mm_popcnt_u64
+
+static inline uint64_t BMI_bextr_u64(uint64_t src, uint64_t start_bit, uint64_t bit_len) {
+  DCHECK(false) << "CPU doesn't support bmi1";
+  return 0;
+}
+
+static inline uint64_t BMI_bextr_u64(uint64_t src, uint64_t bit_len) {
+  DCHECK(false) << "CPU doesn't support bmi1";
+  return 0;
+}
 
 #else  // IR_COMPILE without SSE 4.2.
 /// When cross-compiling to IR without SSE 4.2 support (i.e. no -msse4.2), we cannot use
@@ -176,6 +204,16 @@ static inline uint32_t SSE4_crc32_u32(uint32_t crc, uint32_t v) {
 
 static inline int64_t POPCNT_popcnt_u64(uint64_t a) {
   DCHECK(false) << "CPU doesn't support SSE 4.2";
+  return 0;
+}
+
+static inline uint64_t BMI_bextr_u64(uint64_t src, uint64_t start_bit, uint64_t bit_len) {
+  DCHECK(false) << "CPU doesn't support bmi1";
+  return 0;
+}
+
+static inline uint64_t BMI_bextr_u64(uint64_t src, uint64_t bit_len) {
+  DCHECK(false) << "CPU doesn't support bmi1";
   return 0;
 }
 

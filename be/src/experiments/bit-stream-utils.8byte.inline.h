@@ -16,6 +16,8 @@
 #ifndef IMPALA_EXPERIMENTS_BIT_STREAM_UTILS_8BYTE_INLINE_H
 #define IMPALA_EXPERIMENTS_BIT_STREAM_UTILS_8BYTE_INLINE_H
 
+#include "immintrin.h"
+
 #include "experiments/bit-stream-utils.8byte.h"
 
 namespace impala {
@@ -128,6 +130,62 @@ inline bool BitReader_8byte::GetVlqInt(int32_t* v) {
 }
 
 inline void BitReader_8byte::Align() {
+  if (UNLIKELY(bit_offset_ > 56)) {
+    ++offset_;
+    bit_offset_ = 0;
+    DCHECK_LE(offset_, max_bytes_);
+  } else {
+    bit_offset_ = BitUtil::RoundUpNumBytes(bit_offset_) * 8;
+  }
+}
+
+template<typename T>
+__attribute__((target("bmi")))
+inline bool BitReader_opt::GetValue(int num_bits, T* v) {
+  int size = sizeof(T) * 8;
+  DCHECK_LE(num_bits, size);
+  sum_bits_ += num_bits;
+  if (UNLIKELY(sum_bits_ > max_bits_)) return false;
+
+  uint64_t tmp = *buffer_;
+  *v = _bextr_u64(*buffer_, bit_offset_, num_bits);
+  bit_offset_ += num_bits;
+  if (bit_offset_ >= 64) {
+    ++buffer_;
+    bit_offset_ -= 64;
+    // Read bits of v that crossed into new byte offset
+    *v |= _bextr_u64(*buffer_, 0, bit_offset_) << (num_bits - bit_offset_);
+  }
+  DCHECK_LT(bit_offset_, 64);
+  return true;
+}
+
+template<typename T>
+inline bool BitReader_opt::GetAligned(int num_bits, T* v) {
+ Align();
+  if (UNLIKELY(bytes_left() < BitUtil::Ceil(num_bits, 8))) return false;
+  DCHECK_EQ(bit_offset_ % 8, 0);
+  bool result = GetValue(num_bits, v);
+  DCHECK(result);
+  Align();
+  return true;
+}
+
+inline bool BitReader_opt::GetVlqInt(int32_t* v) {
+  *v = 0;
+  int shift = 0;
+  int num_bytes = 0;
+  uint8_t byte = 0;
+  do {
+    if (!GetAligned<uint8_t>(8, &byte)) return false;
+    *v |= (byte & 0x7F) << shift;
+    shift += 7;
+    DCHECK_LE(++num_bytes, MAX_VLQ_BYTE_LEN);
+  } while ((byte & 0x80) != 0);
+  return true;
+}
+
+inline void BitReader_opt::Align() {
   if (UNLIKELY(bit_offset_ > 56)) {
     ++offset_;
     bit_offset_ = 0;

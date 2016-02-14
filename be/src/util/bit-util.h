@@ -136,6 +136,26 @@ class BitUtil {
     return BitUtil::Popcount(static_cast<typename make_unsigned<T>::type>(v));
   }
 
+  static inline uint64_t BextrNoHw(uint64_t v, uint64_t start_bit, uint64_t bit_len) {
+    return TrailingBits(v, start_bit + bit_len) >> start_bit;
+  }
+
+  static inline uint64_t Bextr(uint64_t v, uint64_t start_bit, uint64_t bit_len) {
+    if (LIKELY(CpuInfo::IsSupported(CpuInfo::BMI1))) {
+      return BMI_bextr_u64(v, start_bit, bit_len);
+    } else {
+      return BextrNoHw(v, start_bit, bit_len);
+    }
+  }
+
+  static inline uint64_t Bextr(uint64_t v, uint64_t bit_len) {
+    if (LIKELY(CpuInfo::IsSupported(CpuInfo::BMI1))) {
+      return BMI_bextr_u64(v, bit_len);
+    } else {
+      return TrailingBits(v, bit_len);
+    }
+  }
+
   /// Returns the 'num_bits' least-significant bits of 'v'.
   static inline uint64_t TrailingBits(uint64_t v, int num_bits) {
     if (UNLIKELY(num_bits == 0)) return 0;

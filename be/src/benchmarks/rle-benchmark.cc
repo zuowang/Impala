@@ -189,6 +189,28 @@ void TestBitWriter8ByteDecode(int batch_size, void* d) {
   CHECK(data->result);
 }
 
+__attribute__((target("bmi")))
+void TestBitWriterOptDecode(int batch_size, void* d) {
+  TestData* data = reinterpret_cast<TestData*>(d);
+  data->result = true;
+  int64_t v;
+  for (int i = 0; i < batch_size; ++i) {
+    BitReader_opt reader(data->buffer, BUFFER_LEN);
+    // Unroll this to focus more on Put performance.
+    for (int j = 0; j < data->num_values; j += 8) {
+      data->result &= reader.GetValue(data->num_bits, &v);
+      data->result &= reader.GetValue(data->num_bits, &v);
+      data->result &= reader.GetValue(data->num_bits, &v);
+      data->result &= reader.GetValue(data->num_bits, &v);
+      data->result &= reader.GetValue(data->num_bits, &v);
+      data->result &= reader.GetValue(data->num_bits, &v);
+      data->result &= reader.GetValue(data->num_bits, &v);
+      data->result &= reader.GetValue(data->num_bits, &v);
+    }
+  }
+  CHECK(data->result);
+}
+
 int main(int argc, char** argv) {
   CpuInfo::Init();
 
@@ -234,6 +256,10 @@ int main(int argc, char** argv) {
     name.str("");
     name << "\"BitWriter" << suffix.str() << "\"";
     decode_suite.AddBenchmark(name.str(), TestBitWriterDecode, &data[i], baseline);
+
+    name.str("");
+    name << "\"BitWriter opt" << suffix.str() << "\"";
+    decode_suite.AddBenchmark(name.str(), TestBitWriterOptDecode, &data[i], baseline);
   }
   cout << decode_suite.Measure() << endl;
 

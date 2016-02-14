@@ -118,10 +118,62 @@ class BitReader_8byte {
 
   /// Maximum byte length of a vlq encoded int
   static const int MAX_VLQ_BYTE_LEN = 5;
- 
+
  private:
   uint64_t* buffer_;
   int max_bytes_;
+  int offset_;            // Offset into buffer_
+  int bit_offset_;        // Offset into current uint64_t
+
+  /// Advances offset_ and/or bit_offset_ to next byte boundary in buffer_.
+  inline void Align();
+};
+
+class BitReader_opt {
+ public:
+  /// buffer: buffer to read from.  The buffer's length is 'buffer_len' and must be a
+  /// multiple of 8.
+  BitReader_opt(uint8_t* buffer, int buffer_len) :
+      buffer_(reinterpret_cast<uint64_t*>(buffer)),
+      max_bytes_(buffer_len),
+      max_bits_(buffer_len * 8),
+      sum_bits_(0),
+      offset_(0),
+      bit_offset_(0) {
+    DCHECK_EQ(buffer_len % 8, 0);
+  }
+
+  BitReader_opt() : buffer_(NULL), max_bytes_(0), max_bits_(0) {}
+
+  /// Gets the next value from the buffer.
+  /// Returns true if 'v' could be read or false if there are not enough bytes left.
+  template<typename T>
+  bool GetValue(int num_bits, T* v);
+
+  /// Reads a T sized value from the buffer.  T needs to be a native type and little
+  /// endian.  The value is assumed to be byte aligned so the stream will be advance
+  /// to the start of the next byte before v is read.
+  template<typename T>
+  bool GetAligned(int num_bits, T* v);
+
+  /// Reads a vlq encoded int from the stream.  The encoded int must start at the
+  /// beginning of a byte. Return false if there were not enough bytes in the buffer.
+  bool GetVlqInt(int32_t* v);
+
+  /// Returns the number of bytes left in the stream, not including the current byte (i.e.,
+  /// there may be an additional fraction of a byte).
+  inline int bytes_left() {
+    return max_bytes_ - (offset_ * 8 + BitUtil::Ceil(bit_offset_, 8));
+  }
+
+  /// Maximum byte length of a vlq encoded int
+  static const int MAX_VLQ_BYTE_LEN = 5;
+
+ private:
+  uint64_t* buffer_;
+  int max_bytes_;
+  int max_bits_;
+  int sum_bits_;
   int offset_;            // Offset into buffer_
   int bit_offset_;        // Offset into current uint64_t
 

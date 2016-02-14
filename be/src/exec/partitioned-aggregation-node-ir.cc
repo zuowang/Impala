@@ -134,3 +134,8 @@ Status PartitionedAggregationNode::ProcessBatch_true(
     RowBatch* batch, HashTableCtx* ht_ctx) {
   return ProcessBatch<true>(batch, ht_ctx);
 }
+
+template Status PartitionedAggregationNode::ProcessBatch<false>(
+    RowBatch* batch, HashTableCtx* ht_ctx);
+template Status PartitionedAggregationNode::ProcessBatch<true>(
+    RowBatch* batch, HashTableCtx* ht_ctx);

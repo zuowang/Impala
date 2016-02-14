@@ -59,6 +59,7 @@ static struct {
   { "sse4_1", CpuInfo::SSE4_1 },
   { "sse4_2", CpuInfo::SSE4_2 },
   { "popcnt", CpuInfo::POPCNT },
+  { "bmi1",   CpuInfo::BMI1 },
 };
 static const long num_flags = sizeof(flag_mappings) / sizeof(flag_mappings[0]);
 

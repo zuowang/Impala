@@ -208,6 +208,7 @@ class DictDecoder : public DictDecoderBase {
 
  private:
   std::vector<T> dict_;
+  uint32_t dict_size_;
 };
 
 template<typename T>
@@ -265,12 +266,24 @@ inline int DictEncoder<StringValue>::AddToTable(const StringValue& value,
   return bytes_added;
 }
 
+// template<typename T>
+// inline bool DictDecoder<T>::GetValue(T* value) {
+//   int index = -1; // Initialize to avoid compiler warning.
+//   bool result = data_decoder_.Get(&index);
+//   // Use & to avoid branches.
+//   if (LIKELY(result & (index >= 0) & (index < dict_.size()))) {
+//     *value = dict_[index];
+//     return true;
+//   }
+//   return false;
+// }
+
 template<typename T>
 inline bool DictDecoder<T>::GetValue(T* value) {
-  int index = -1; // Initialize to avoid compiler warning.
-  bool result = data_decoder_.Get(&index);
+  unsigned int index = -1; // Initialize to avoid compiler warning.
+  data_decoder_.QuickGet(&index);
   // Use & to avoid branches.
-  if (LIKELY(result & (index >= 0) & (index < dict_.size()))) {
+  if (LIKELY(index < dict_size_)) {
     *value = dict_[index];
     return true;
   }
@@ -329,6 +342,7 @@ inline void DictDecoder<T>::Reset(uint8_t* dict_buffer, int dict_len,
         ParquetPlainEncoder::Decode(dict_buffer, fixed_len_size, &value);
     dict_.push_back(value);
   }
+  dict_size_ = dict_.size();
 }
 
 }
